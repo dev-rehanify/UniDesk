@@ -1,0 +1,93 @@
+{
+  "name": "unidesk",
+  "productName": "UniDesk",
+  "version": "1.1.0",
+  "description": "UniDesk - free, open-source, peer-to-peer remote desktop for Windows and macOS. A fast AnyDesk / TeamViewer alternative with unattended access, AV1 4K 60fps streaming, file transfer and clipboard sync.",
+  "keywords": [
+    "remote-desktop",
+    "remote-access",
+    "remote-control",
+    "anydesk-alternative",
+    "teamviewer-alternative",
+    "webrtc",
+    "p2p",
+    "unattended-access",
+    "screen-sharing",
+    "electron",
+    "windows",
+    "macos"
+  ],
+  "homepage": "https://dev-rehanify.github.io/UniDesk/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dev-rehanify/UniDesk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dev-rehanify/UniDesk/issues"
+  },
+  "author": "dev-rehanify",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "icons": "electron scripts/make-icon.js",
+    "build": "electron-builder --win dir --x64 --config.win.signAndEditExecutable=false --config.directories.output=release",
+    "build:installer": "electron-builder --win nsis --x64 --config.directories.output=release",
+    "build:mac": "electron-builder --mac dmg zip --config.directories.output=release"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "peerjs": "^1.5.4",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.unidesk.app",
+    "productName": "UniDesk",
+    "files": [
+      "**/*",
+      "!docs/**",
+      "!release/**",
+      "!scripts/**",
+      "!*.md",
+      "!.github/**",
+      "!server/**"
+    ],
+    "artifactName": "UniDesk-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        "zip",
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.png",
+      "identity": null,
+      "hardenedRuntime": false,
+      "extendInfo": {
+        "NSScreenCaptureUsageDescription": "UniDesk needs screen recording so a trusted partner can see this Mac.",
+        "NSAppleEventsUsageDescription": "UniDesk uses accessibility to let a trusted partner control this Mac.",
+        "NSMicrophoneUsageDescription": "UniDesk can share this Mac's sound during a session."
+      }
+    },
+    "dmg": {
+      "title": "UniDesk"
+    }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}

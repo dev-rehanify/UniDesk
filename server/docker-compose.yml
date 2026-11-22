@@ -1,0 +1,17 @@
+# UniDesk self-host kit: your own connection server (signaling) + TURN relay.
+# Run on any Linux VPS with Docker:   docker compose up -d
+# Then in UniDesk → Settings → Network, enter your server's host and TURN details.
+services:
+  signaling:
+    image: peerjs/peerjs-server:latest
+    restart: unless-stopped
+    command: ["--port", "9000", "--path", "/", "--allow_discovery", "false"]
+    ports:
+      - "9000:9000"
+
+  turn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    network_mode: host          # TURN needs many UDP ports; host networking is simplest
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro

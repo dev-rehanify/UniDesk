@@ -1,0 +1,88 @@
+name: Build UniDesk
+
+# Builds Windows and macOS (Apple Silicon + Intel) apps on every push to main
+# and publishes them to ONE release named after the version in package.json
+# (currently v1.1.0). The release, its tag and its files are replaced in place,
+# so there is only ever one version until package.json's "version" is changed.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**.md', 'LICENSE']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            cmd: npx electron-builder --win zip nsis --x64 --publish never --config.directories.output=release
+          - os: macos-latest        # Apple Silicon (arm64)
+            cmd: npx electron-builder --mac dmg zip --arm64 --publish never --config.directories.output=release
+          - os: macos-latest        # Intel (x64), cross-built
+            cmd: npx electron-builder --mac dmg zip --x64 --publish never --config.directories.output=release
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Stamp build number (used by the auto-updater)
+        shell: bash
+        run: |
+          echo "{\"build\": ${{ github.run_number }}, \"sha\": \"${{ github.sha }}\"}" > build-info.json
+          cat build-info.json
+      - name: Build
+        run: ${{ matrix.cmd }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unidesk-${{ strategy.job-index }}
+          path: |
+            release/*.exe
+            release/*.zip
+            release/*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish to the single version release (replace in place)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="v$(node -p "require('./package.json').version")"
+          # move the version tag to this commit
+          git tag -f "$V" && git push -f origin "refs/tags/$V"
+          if ! gh release view "$V" >/dev/null 2>&1; then
+            gh release create "$V" --title "UniDesk ${V#v}" --latest \
+              --notes "Free, open-source peer-to-peer remote desktop for Windows and macOS. Download the file for your system below."
+          fi
+          # latest.json tells installed apps which build is newest and each file's SHA-256
+          BUILD=${{ github.run_number }} SHA=${{ github.sha }} node -e "
+            const fs=require('fs'),c=require('crypto'),v=require('./package.json').version;
+            const f=n=>({name:n,sha256:c.createHash('sha256').update(fs.readFileSync('dist/'+n)).digest('hex')});
+            const files={'win-installer':f('UniDesk-'+v+'-win-x64.exe'),'win-zip':f('UniDesk-'+v+'-win-x64.zip'),'mac-arm64':f('UniDesk-'+v+'-mac-arm64.zip'),'mac-x64':f('UniDesk-'+v+'-mac-x64.zip')};
+            fs.writeFileSync('dist/latest.json',JSON.stringify({version:v,build:+process.env.BUILD,sha:process.env.SHA,files},null,2));
+          "
+          # remove old files, then upload the fresh builds
+          for a in $(gh release view "$V" --json assets --jq '.assets[].name'); do gh release delete-asset "$V" "$a" --yes; done
+          gh release upload "$V" dist/* --clobber
+          gh release edit "$V" --latest

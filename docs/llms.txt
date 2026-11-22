@@ -1,0 +1,20 @@
+# UniDesk
+
+> UniDesk is a free, open-source (MIT), peer-to-peer remote desktop application for Windows 10/11 and macOS. Tagline: "UniDesk. Anywhere. Instantly." It is an alternative to AnyDesk and TeamViewer.
+
+UniDesk lets a user view and control another computer over the internet by entering its 9-digit address. Video, audio, input, clipboard, chat and files travel directly between the two computers over WebRTC, encrypted end to end (DTLS-SRTP). No account or subscription is required.
+
+## Key facts
+- Price: free forever; license: MIT
+- Platforms: Windows 10, Windows 11, macOS (Apple Silicon and Intel)
+- Connection: 9-digit address, peer-to-peer WebRTC, STUN NAT traversal
+- Video: AV1 > VP9 > H.264 preference, up to 4K at 60 fps
+- Security: approval required for every session; optional unattended access protected by a password stored only as a PBKDF2-SHA256 hash, HMAC challenge-response login, lockout after 5 failed attempts for 15 minutes
+- Features: unattended access, multi-monitor switching, two-way clipboard sync, "type my clipboard", drag-and-drop file transfer, chat, session recording, screenshots, auto-reconnect, address book with nicknames, remote PC info, view-only mode, idle auto-disconnect, lock PC on session end, session history, invite links (unidesk:// and web links), draw/annotate on the remote screen, custom signaling server and TURN relay, automatic verified updates, LAN mode (no server needed on a local network), self-host kit (signaling + TURN via Docker), admin mode with UAC prompt support, two-way file transfer, tray mode, start with Windows, dark/light themes
+- Author: dev-rehanify
+
+## Links
+- [Website](https://dev-rehanify.github.io/UniDesk/)
+- [Source code](https://github.com/dev-rehanify/UniDesk)
+- [Downloads](https://github.com/dev-rehanify/UniDesk/releases/latest)
+- [README](https://github.com/dev-rehanify/UniDesk/blob/main/README.md)

@@ -1,0 +1,417 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>UniDesk</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src *; media-src * blob: mediastream:">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b8cff"/><stop offset="1" stop-color="#a26bff"/></linearGradient>
+    <symbol id="i-screen" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-screens" viewBox="0 0 24 24"><rect x="2" y="3" width="13" height="9" rx="1.6"/><rect x="9" y="11" width="13" height="9" rx="1.6"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="i-mouse" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 7v4"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3-3 3 3"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M12 14l4-4"/><path d="M3.3 17a10 10 0 1 1 17.4 0"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2a2 2 0 0 0-1.5 3.3A1.6 1.6 0 0 1 12 22z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16.5" cy="10.5" r="1"/></symbol>
+    <symbol id="i-motion" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5M8 11h6M11 8v6"/></symbol>
+    <symbol id="i-tray" viewBox="0 0 24 24"><path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/></symbol>
+    <symbol id="i-power2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M9.5 10l2 2 3.5-3.5"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/></symbol>
+    <symbol id="i-admin" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 8v5M12 16h.01"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></symbol>
+  </defs>
+</svg>
+
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="titlebar">
+  <div class="brand">
+    <div class="logo"><img src="assets/logo.svg" alt=""></div>
+    <span class="name">Uni<b>Desk</b></span>
+  </div>
+  <div class="status" id="statusPill"><span class="dot" id="dot"></span><span id="statusText">Connecting to network…</span></div>
+  <div class="tb-actions">
+    <button class="update-pill" id="updateBtn"><svg class="ic sm"><use href="#i-download"/></svg><span id="updateLabel">Update</span></button>
+    <button class="icon-btn" id="themeBtn" title="Toggle dark / light"><svg class="ic"><use id="themeIcon" href="#i-moon"/></svg></button>
+    <button class="icon-btn" id="settingsBtn" title="Settings (Ctrl+,)"><svg class="ic"><use href="#i-gear"/></svg></button>
+  </div>
+</header>
+
+<!-- ============ HOME ============ -->
+<main id="home" class="view active">
+  <section class="hero">
+    <h1>UniDesk. <span class="grad">Anywhere.</span> Instantly.</h1>
+    <p>Peer-to-peer remote desktop, encrypted end to end, tuned for speed.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card reveal" style="--d:0">
+      <div class="card-head"><svg class="ic"><use href="#i-screen"/></svg><h2>Your desk</h2></div>
+      <p class="sub">Share this address with someone you trust.</p>
+      <div class="id-wrap">
+        <div class="pulse" aria-hidden="true"></div>
+        <div id="myId" class="id" title="Click to copy">··· ··· ···</div>
+        <button class="icon-btn" id="copyBtn" title="Copy address"><svg class="ic"><use href="#i-copy"/></svg></button>
+        <button class="icon-btn" id="inviteBtn" title="Copy invite link"><svg class="ic"><use href="#i-link"/></svg></button>
+      </div>
+      <div class="note"><svg class="ic sm"><use href="#i-shield"/></svg>Every session needs your approval
+        <span class="ua-badge" id="unattendedBadge" title="People with your password can connect without approval"><svg class="ic sm"><use href="#i-lock"/></svg>Unattended on</span></div>
+    </section>
+
+    <section class="card reveal" style="--d:1">
+      <div class="card-head"><svg class="ic"><use href="#i-screens"/></svg><h2>Remote desk</h2></div>
+      <p class="sub">Enter your partner's 9-digit address.</p>
+      <div class="field">
+        <input id="remoteId" placeholder="000 000 000" maxlength="11" autofocus spellcheck="false" autocomplete="off">
+        <button id="connectBtn" class="primary"><span>Connect</span><svg class="ic"><use href="#i-arrow"/></svg></button>
+      </div>
+      <div class="hint" id="connHint"></div>
+      <div id="nearbyWrap" style="display:none">
+        <div class="recents-head"><svg class="ic sm"><use href="#i-wifi"/></svg>On your network</div>
+        <div id="nearby" class="nearby"></div>
+      </div>
+      <div class="recents-head"><svg class="ic sm"><use href="#i-clock"/></svg><span id="recentsTitle">Recent</span></div>
+      <div id="recents" class="recents"><span class="empty">No recent sessions yet</span></div>
+    </section>
+  </div>
+
+  <div class="features reveal" style="--d:2">
+    <div><svg class="ic"><use href="#i-shield"/></svg><b>End-to-end encrypted</b><span>DTLS-SRTP, no middleman</span></div>
+    <div><svg class="ic"><use href="#i-bolt"/></svg><b>Direct P2P</b><span>AV1 · VP9 · H.264, 60 fps</span></div>
+    <div><svg class="ic"><use href="#i-screens"/></svg><b>Multi-monitor</b><span>Switch screens live</span></div>
+    <div><svg class="ic"><use href="#i-file"/></svg><b>Files & clipboard</b><span>Drag, drop, copy, paste</span></div>
+  </div>
+</main>
+
+<!-- ============ CONNECTING OVERLAY ============ -->
+<div id="connecting" class="overlay">
+  <div class="radar"><i></i><i></i><i></i><div class="core"><svg class="ic"><use href="#i-screens"/></svg></div></div>
+  <h3 id="connTitle">Calling <span id="connWho"></span></h3>
+  <p id="connSub">Waiting for your partner to accept…</p>
+  <div class="auth-box" id="authBox">
+    <div class="pw-field">
+      <svg class="ic"><use href="#i-lock"/></svg>
+      <input type="password" id="authPw" placeholder="Password" autocomplete="off" spellcheck="false">
+      <button class="icon-btn" id="authEye" title="Show password"><svg class="ic"><use href="#i-eye"/></svg></button>
+    </div>
+    <label class="check"><input type="checkbox" id="authRemember"><span></span>Remember on this computer (encrypted)</label>
+    <div class="auth-err" id="authErr"></div>
+    <div class="auth-actions">
+      <button class="primary" id="authGo"><span>Unlock</span><svg class="ic"><use href="#i-arrow"/></svg></button>
+      <button class="ghost-btn" id="authAsk">Ask for permission</button>
+    </div>
+  </div>
+  <button class="ghost-btn" id="cancelBtn">Cancel</button>
+</div>
+
+<!-- ============ SESSION ============ -->
+<section id="session" class="view">
+  <div class="hotzone" id="hotzone"></div>
+  <nav class="toolbar" id="toolbar">
+    <div class="tb-id"><span class="live"></span><span id="sessWho">—</span></div>
+    <div class="sep"></div>
+    <button class="tb" id="screensBtn" title="Switch screen (Ctrl+Alt+← →)"><svg class="ic"><use href="#i-screens"/></svg><span id="screenLabel">Screen 1</span></button>
+    <button class="tb" id="ctrlBtn" title="Toggle control"><svg class="ic"><use href="#i-mouse"/></svg><span>Control</span></button>
+    <div class="tb-select" title="Stream quality"><svg class="ic"><use href="#i-gauge"/></svg>
+      <select id="quality"><option value="speed">Speed</option><option value="balanced" selected>Balanced</option><option value="quality">Best quality</option></select>
+    </div>
+    <div class="tb-select" title="Send shortcut"><svg class="ic"><use href="#i-key"/></svg>
+      <select id="combo"><option value="">Keys</option><option value="tm">Ctrl+Shift+Esc</option><option value="win">Start menu</option><option value="alttab">Alt+Tab</option><option value="desk">Show desktop</option><option value="run">Run (Win+R)</option><option value="lock">Lock (Win+L)</option><option value="explorer">File Explorer (Win+E)</option><option value="settings">Windows Settings (Win+I)</option><option value="typeclip">⌨ Type my clipboard</option></select>
+    </div>
+    <button class="tb" id="scaleBtn" title="Fit to window / actual size"><svg class="ic"><use href="#i-zoom"/></svg><span id="scaleLabel">Fit</span></button>
+    <button class="tb" id="drawBtn" title="Draw on their screen"><svg class="ic"><use href="#i-pen"/></svg><span class="pen-dot" id="penColor" title="Change pen colour"></span></button>
+    <button class="tb" id="shotBtn" title="Screenshot"><svg class="ic"><use href="#i-camera"/></svg></button>
+    <button class="tb" id="recBtn" title="Record session"><span class="rec-dot"></span><span id="recTime"></span></button>
+    <button class="tb" id="fileBtn" title="Send files (or drag & drop)"><svg class="ic"><use href="#i-file"/></svg></button>
+    <button class="tb" id="chatBtn" title="Chat"><svg class="ic"><use href="#i-chat"/></svg><span class="badge" id="chatBadge"></span></button>
+    <label class="tb toggle" title="Clipboard sync"><svg class="ic"><use href="#i-clip"/></svg><input type="checkbox" id="clipSync" checked><span class="sw"></span></label>
+    <button class="tb" id="fullBtn" title="Fullscreen (F11)"><svg class="ic"><use href="#i-full"/></svg></button>
+    <div class="sep"></div>
+    <button class="tb danger" id="endBtn" title="Disconnect"><svg class="ic"><use href="#i-power"/></svg></button>
+  </nav>
+
+  <div class="screens-panel" id="screensPanel">
+    <div class="sp-info" id="deskInfo"></div><div class="sp-head">Remote screens <span class="kbd">Ctrl</span><span class="kbd">Alt</span><span class="kbd">← →</span></div>
+    <div class="sp-grid" id="screensGrid"></div>
+  </div>
+
+  <div id="stage" tabindex="0">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="drawLayer" class="draw-layer"></canvas>
+    <div class="drop" id="dropHint"><svg class="ic xl"><use href="#i-file"/></svg><b>Drop to send</b><span>Files go to the remote Downloads folder</span></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="progress" id="progress"><i id="progressBar"></i></div>
+  <input type="file" id="filePick" multiple hidden>
+</section>
+
+<!-- ============ HOST BANNER ============ -->
+<div id="hosting" class="hosting">
+  <span class="rec"></span><span>Your screen is shared with <b id="hostWho"></b></span>
+  <button class="pill-btn" id="hostFile"><svg class="ic sm"><use href="#i-file"/></svg>Send file</button>
+  <button class="pill-btn" id="hostChat"><svg class="ic sm"><use href="#i-chat"/></svg>Chat</button>
+  <button class="pill-btn stop" id="stopHost"><svg class="ic sm"><use href="#i-x"/></svg>Stop</button>
+</div>
+
+<!-- ============ CHAT DRAWER ============ -->
+<aside id="chat" class="chat">
+  <div class="chat-head"><svg class="ic"><use href="#i-chat"/></svg>Chat<button class="icon-btn" id="chatClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <div id="chatLog" class="chat-log"><div class="chat-empty">Messages are sent peer-to-peer.</div></div>
+  <div class="chat-input"><input id="chatInput" placeholder="Type a message…"><button class="icon-btn accent" id="chatSend"><svg class="ic"><use href="#i-send"/></svg></button></div>
+</aside>
+
+<!-- ============ SETTINGS ============ -->
+<div class="settings-scrim" id="settingsScrim"></div>
+<aside class="settings" id="settings" aria-label="Settings">
+  <div class="st-head">
+    <img src="assets/logo.svg" alt="">
+    <h2>Settings<small>Saved automatically on this computer</small></h2>
+    <button class="icon-btn" id="settingsClose" title="Close (Esc)"><svg class="ic"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="st-tabs" id="stTabs">
+    <span class="st-ink" id="stInk"></span>
+    <button class="st-tab on" data-page="appearance">Appearance</button>
+    <button class="st-tab" data-page="session">Session</button>
+    <button class="st-tab" data-page="security">Security</button>
+    <button class="st-tab" data-page="network">Network</button>
+    <button class="st-tab" data-page="about">About</button>
+  </div>
+  <div class="st-body">
+    <!-- Appearance -->
+    <section class="st-page on" data-page="appearance">
+      <div class="st-group">
+        <div class="st-label">Theme</div>
+        <div class="st-card"><div class="themes">
+          <button class="theme-card" data-theme-opt="system"><div class="pv sys"><i></i><i></i></div><span>System</span></button>
+          <button class="theme-card" data-theme-opt="dark"><div class="pv dark"><i></i><i></i></div><span>Dark</span></button>
+          <button class="theme-card" data-theme-opt="light"><div class="pv light"><i></i><i></i></div><span>Light</span></button>
+        </div></div>
+      </div>
+      <div class="st-group">
+        <div class="st-label">Personalise</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-palette"/></svg><div class="txt"><b>Accent colour</b><span>Buttons, highlights and the glow</span></div>
+            <div class="swatches" id="swatches"></div></div>
+          <div class="row"><svg class="ic"><use href="#i-motion"/></svg><div class="txt"><b>Reduce motion</b><span>Turn off animations and the moving background</span></div>
+            <label class="switch"><input type="checkbox" data-set="calm"><i></i></label></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Session -->
+    <section class="st-page" data-page="session">
+      <div class="st-group">
+        <div class="st-label">When I connect to someone</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-gauge"/></svg><div class="txt"><b>Default quality</b><span>You can still change it during a session</span></div>
+            <div class="seg" data-seg="quality"><button data-v="speed">Speed</button><button data-v="balanced">Balanced</button><button data-v="quality">Best</button></div></div>
+          <div class="row"><svg class="ic"><use href="#i-clip"/></svg><div class="txt"><b>Clipboard sync</b><span>Copy on one PC, paste on the other</span></div>
+            <label class="switch"><input type="checkbox" data-set="clip"><i></i></label></div>
+          <div class="row"><svg class="ic"><use href="#i-chart"/></svg><div class="txt"><b>Show connection stats</b><span>Codec, fps, bandwidth and ping</span></div>
+            <label class="switch"><input type="checkbox" data-set="stats"><i></i></label></div>
+          <div class="row"><svg class="ic"><use href="#i-full"/></svg><div class="txt"><b>Start in fullscreen</b><span>Go fullscreen as soon as the session opens</span></div>
+            <label class="switch"><input type="checkbox" data-set="autoFull"><i></i></label></div>
+        </div>
+      </div>
+      <div class="st-group">
+        <div class="st-label">When someone connects to me</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-volume"/></svg><div class="txt"><b>Share computer sound</b><span>Stream what this PC plays to the viewer</span></div>
+            <label class="switch"><input type="checkbox" data-set="audio"><i></i></label></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Security -->
+    <section class="st-page" data-page="security">
+      <div class="st-group">
+        <div class="st-label">Unattended access</div>
+        <div class="st-card ua-card">
+          <div class="row"><svg class="ic"><use href="#i-lock"/></svg><div class="txt"><b>Allow unattended access</b><span>People who know the password can connect without you clicking Accept</span></div>
+            <label class="switch"><input type="checkbox" data-set="unattended"><i></i></label></div>
+          <div class="row"><svg class="ic"><use href="#i-key"/></svg><div class="txt"><b>Password</b><span id="pwState">No password set yet</span></div>
+            <button class="btn-soft danger" id="pwRemove" style="display:none">Remove</button>
+            <button class="btn-soft" id="pwBtn">Set password</button></div>
+          <div class="row ua-info"><svg class="ic sm"><use href="#i-shield"/></svg><div class="txt"><span>Your password is never stored or sent. UniDesk keeps only a PBKDF2 hash and checks a one-time challenge. 5 wrong tries locks unattended access for 15 minutes.</span></div></div>
+        </div>
+      </div>
+      <div class="st-group">
+        <div class="st-label">Stay reachable</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-power2"/></svg><div class="txt"><b>Start with Windows</b><span>Launch hidden in the tray when you sign in (installed app only)</span></div>
+            <label class="switch"><input type="checkbox" data-set="startup"><i></i></label></div>
+          <div class="row"><svg class="ic"><use href="#i-tray"/></svg><div class="txt"><b>Keep running in the tray</b><span>Closing the window keeps UniDesk reachable</span></div>
+            <label class="switch"><input type="checkbox" data-set="tray"><i></i></label></div>
+        </div>
+      </div>
+      <div class="st-group">
+        <div class="st-label">Incoming sessions</div>
+        <div class="st-card">
+          <div class="row locked"><svg class="ic"><use href="#i-shield"/></svg><div class="txt"><b>Ask before every session</b><span>Always on: nobody can connect without your OK</span></div>
+            <label class="switch"><input type="checkbox" checked disabled><i></i></label></div>
+          <div class="row"><svg class="ic"><use href="#i-mouse"/></svg><div class="txt"><b>Allow remote control</b><span>Off = visitors can only watch</span></div>
+            <label class="switch"><input type="checkbox" data-set="allowControl"><i></i></label></div>
+          <div class="row"><svg class="ic"><use href="#i-file"/></svg><div class="txt"><b>Allow receiving files</b><span>Saved to Downloads\UniDesk</span></div>
+            <label class="switch"><input type="checkbox" data-set="allowFiles"><i></i></label></div>
+          <div class="row"><svg class="ic"><use href="#i-clip"/></svg><div class="txt"><b>Allow clipboard access</b><span>Let visitors read and write your clipboard</span></div>
+            <label class="switch"><input type="checkbox" data-set="allowClip"><i></i></label></div>
+        </div>
+      </div>
+      <div class="st-group" id="adminGroup">
+        <div class="st-label">Administrator &amp; UAC (Windows)</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-admin"/></svg><div class="txt"><b>Running as administrator</b><span id="adminState">Checking…</span></div>
+            <button class="btn-soft" id="adminBtn">Restart as admin</button></div>
+          <div class="row"><svg class="ic"><use href="#i-shield"/></svg><div class="txt"><b>Let visitors answer UAC prompts</b><span id="uacState">Checking…</span></div>
+            <button class="btn-soft" id="uacBtn">Turn on</button></div>
+          <div class="row ua-info"><svg class="ic sm"><use href="#i-lock"/></svg><div class="txt"><span>Showing UAC on the normal desktop slightly lowers protection against malicious apps faking prompts. Turn it on only on PCs you support remotely. The Windows lock screen and Ctrl+Alt+Del need a signed system service, which is planned. Until then use Lock, Task Manager and the other shortcuts in the Keys menu.</span></div></div>
+        </div>
+      </div>
+      <div class="st-group">
+        <div class="st-label">Session safety</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-lock"/></svg><div class="txt"><b>Lock this PC when a session ends</b><span>Windows locks as soon as the visitor disconnects</span></div>
+            <div class="seg" data-seg="lockOnEnd"><button data-v="never">Never</button><button data-v="unattended">Unattended</button><button data-v="always">Always</button></div></div>
+          <div class="row"><svg class="ic"><use href="#i-clock"/></svg><div class="txt"><b>Disconnect idle visitors</b><span>End the session when nothing happens for a while</span></div>
+            <div class="seg" data-seg="idleMins"><button data-v="0">Off</button><button data-v="15">15m</button><button data-v="30">30m</button><button data-v="60">1h</button></div></div>
+        </div>
+      </div>
+      <div class="st-group">
+        <div class="st-label">Your address</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-lock"/></svg><div class="txt"><b class="mono" id="stId">—</b><span>Get a new address if you've shared it too widely</span></div>
+            <button class="btn-soft danger" id="newIdBtn"><span>New address</span></button></div>
+          <div class="row"><svg class="ic"><use href="#i-clock"/></svg><div class="txt"><b>Recent connections</b><span>Shown on the home screen</span></div>
+            <button class="btn-soft" id="clearRecents">Clear</button></div>
+          <div class="row"><svg class="ic"><use href="#i-key"/></svg><div class="txt"><b>Saved desk passwords</b><span>Passwords you chose to remember for other desks</span></div>
+            <button class="btn-soft" id="forgetSaved">Forget all</button></div>
+        </div>
+      </div>
+      <div class="st-group">
+        <div class="st-label hist-head"><span>Session history</span><button class="link-btn" id="clearHistory">Clear</button></div>
+        <div class="st-card" id="historyList"></div>
+      </div>
+    </section>
+
+    <!-- Network -->
+    <section class="st-page" data-page="network" id="netForm">
+      <div class="st-group">
+        <div class="st-label">Local network</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-wifi"/></svg><div class="txt"><b>LAN mode</b><span id="lanState">Find and connect to desks on your network with no internet server</span></div>
+            <label class="switch"><input type="checkbox" data-set="lan"><i></i></label></div>
+        </div>
+      </div>
+      <div class="st-group">
+        <div class="st-label">Connection server (signaling)</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-globe"/></svg><div class="txt"><b>Server</b><span id="netState">Default public server</span></div></div>
+          <div class="row form-row"><input id="netHost" placeholder="Host, e.g. peer.example.com (empty = default)" spellcheck="false"><input id="netPort" placeholder="Port" class="w-s"><input id="netPath" placeholder="/path" class="w-s"></div>
+          <div class="row"><svg class="ic"><use href="#i-lock"/></svg><div class="txt"><b>Use TLS (wss://)</b><span>Keep on for servers on the internet</span></div><label class="switch"><input type="checkbox" id="netSecure" checked><i></i></label></div>
+        </div>
+      </div>
+      <div class="st-group">
+        <div class="st-label">Relay (TURN): for strict office &amp; mobile networks</div>
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-tray"/></svg><div class="txt"><b>Relay</b><span id="turnState">No relay</span></div></div>
+          <div class="row form-row"><input id="turnUrls" placeholder="turn:turn.example.com:3478, turns:turn.example.com:5349" spellcheck="false"></div>
+          <div class="row form-row"><input id="turnUser" placeholder="Username" spellcheck="false"><input id="turnPass" type="password" placeholder="Password (stored encrypted)"></div>
+          <div class="row ua-info"><svg class="ic sm"><use href="#i-shield"/></svg><div class="txt"><span>Media stays end-to-end encrypted even through a relay. Both people should use the same server settings. Run your own with <span class="mono">npx peerjs --port 9000</span> and coturn.</span></div></div>
+        </div>
+      </div>
+      <div class="modal-actions"><button class="ghost-btn" id="netReset">Use defaults</button><button class="primary" id="netSave"><span>Save &amp; reconnect</span></button></div>
+    </section>
+
+    <!-- About -->
+    <section class="st-page" data-page="about">
+      <div class="about">
+        <img src="assets/logo.svg" alt="UniDesk logo">
+        <h3>Uni<span class="grad">Desk</span></h3>
+        <p id="aboutVersion">Free forever</p>
+      </div>
+      <div class="st-group">
+        <div class="st-card">
+          <div class="row"><svg class="ic"><use href="#i-shield"/></svg><div class="txt"><b>Encryption</b><span>WebRTC DTLS-SRTP, end to end</span></div></div>
+          <div class="row"><svg class="ic"><use href="#i-bolt"/></svg><div class="txt"><b>Video</b><span>AV1 → VP9 → H.264, up to 4K 60 fps</span></div></div>
+          <div class="row"><svg class="ic"><use href="#i-key"/></svg><div class="txt"><b>Shortcuts</b><span>Ctrl+, settings · F11 fullscreen · Ctrl+Alt+←/→ switch screen · Ctrl+Alt+S screenshot</span></div></div>
+          <div class="row"><svg class="ic"><use href="#i-refresh"/></svg><div class="txt"><b>Reset all settings</b><span>Back to defaults (keeps your address)</span></div>
+            <button class="btn-soft" id="resetSettings">Reset</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</aside>
+
+<!-- ============ PASSWORD DIALOG ============ -->
+<div class="modal" id="pwDialog">
+  <div class="modal-card">
+    <div class="modal-icon"><svg class="ic"><use href="#i-lock"/></svg></div>
+    <h3>Unattended access password</h3>
+    <p>Anyone with this password can control this computer while UniDesk is running. Use something long and unique.</p>
+    <input type="password" id="pw1" placeholder="New password (8+ characters)" autocomplete="new-password">
+    <div class="meter" id="pwMeter" data-s="-1"><i></i><i></i><i></i><i></i></div>
+    <div class="meter-txt" id="pwMeterTxt"></div>
+    <input type="password" id="pw2" placeholder="Repeat password" autocomplete="new-password">
+    <div class="auth-err" id="pwErr"></div>
+    <div class="modal-actions"><button class="ghost-btn" id="pwCancel">Cancel</button><button class="primary" id="pwSave"><span>Save & enable</span></button></div>
+  </div>
+</div>
+
+<!-- ============ RENAME DIALOG ============ -->
+<div class="modal" id="nameDialog">
+  <div class="modal-card">
+    <div class="modal-icon"><svg class="ic"><use href="#i-screen"/></svg></div>
+    <h3>Name this desk</h3>
+    <p>Give it a name you'll recognise, like "Mum's laptop" or "Office PC".</p>
+    <input id="nameInput" maxlength="40" placeholder="Desk name" spellcheck="false">
+    <div class="modal-actions"><button class="ghost-btn" id="nameCancel">Cancel</button><button class="primary" id="nameSave"><span>Save</span></button></div>
+  </div>
+</div>
+
+<!-- ============ FORCED UPDATE ============ -->
+<div class="upd-screen" id="updScreen">
+  <div class="upd-card">
+    <img src="assets/logo.svg" alt="" class="upd-logo">
+    <h3 id="updTitle">Updating UniDesk</h3>
+    <p id="updSub"></p>
+    <div class="upd-track"><i id="updBar"></i></div>
+    <div class="upd-pct" id="updPct">Preparing…</div>
+    <button class="primary" id="updAction" style="display:none"><span>Try again</span></button>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="overlay.js"></script>
+<script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UniDesk: Free Open-Source Remote Desktop for Windows &amp; Mac (AnyDesk Alternative)</title>
+<meta name="description" content="UniDesk is a free, open-source, peer-to-peer remote desktop app for Windows and macOS. Control any computer with a 9-digit address: unattended access, 4K 60fps AV1 streaming, file transfer, clipboard sync. A private AnyDesk and TeamViewer alternative.">
+<meta name="keywords" content="UniDesk, remote desktop, free remote desktop, open source remote desktop, AnyDesk alternative, TeamViewer alternative, remote access software, unattended access, remote control PC, remote desktop Mac, WebRTC remote desktop">
+<link rel="canonical" href="https://dev-rehanify.github.io/UniDesk/">
+<meta name="theme-color" content="#0b1020">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="UniDesk">
+<meta property="og:title" content="UniDesk: UniDesk. Anywhere. Instantly.">
+<meta property="og:description" content="Free, open-source, peer-to-peer remote desktop for Windows and Mac. A fast, private AnyDesk alternative.">
+<meta property="og:url" content="https://dev-rehanify.github.io/UniDesk/">
+<meta property="og:image" content="https://dev-rehanify.github.io/UniDesk/screenshots/home-dark.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="UniDesk: free open-source remote desktop">
+<meta name="twitter:description" content="Control any Windows or Mac computer, peer-to-peer and encrypted. Free forever.">
+<meta name="twitter:image" content="https://dev-rehanify.github.io/UniDesk/screenshots/home-dark.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "UniDesk",
+      "alternateName": "UniDesk Remote Desktop",
+      "description": "Free, open-source, peer-to-peer remote desktop software for Windows and macOS with unattended access, AV1 4K 60fps streaming, file transfer, clipboard sync, chat, multi-monitor support and session recording.",
+      "applicationCategory": "UtilitiesApplication",
+      "applicationSubCategory": "Remote Desktop Software",
+      "operatingSystem": "Windows 10, Windows 11, macOS",
+      "softwareVersion": "1.1.0",
+      "license": "https://opensource.org/licenses/MIT",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "url": "https://dev-rehanify.github.io/UniDesk/",
+      "downloadUrl": "https://github.com/dev-rehanify/UniDesk/releases/latest",
+      "codeRepository": "https://github.com/dev-rehanify/UniDesk",
+      "screenshot": "https://dev-rehanify.github.io/UniDesk/screenshots/home-dark.png",
+      "author": { "@type": "Person", "name": "dev-rehanify", "url": "https://github.com/dev-rehanify" },
+      "featureList": ["Peer-to-peer WebRTC connection", "End-to-end encryption (DTLS-SRTP)", "Unattended access with password", "AV1, VP9 and H.264 up to 4K 60 fps", "Multi-monitor switching", "Two-way clipboard sync", "Drag and drop file transfer", "Chat", "Session recording and screenshots", "Auto-reconnect", "Address book", "Invite links", "Draw on remote screen", "Custom signaling and TURN relay", "Update notifications", "Dark and light themes"]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Is UniDesk free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. UniDesk is free forever and open source under the MIT license. There is no account, subscription or commercial-use fee." } },
+        { "@type": "Question", "name": "Is UniDesk a good AnyDesk or TeamViewer alternative?", "acceptedAnswer": { "@type": "Answer", "text": "UniDesk covers the core features of AnyDesk and TeamViewer (address-based connections, remote control, unattended access, file transfer, clipboard sync and multi-monitor support) and is free and open source. Video goes peer-to-peer between the two computers." } },
+        { "@type": "Question", "name": "Does UniDesk work on Mac?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. UniDesk runs on Windows 10, Windows 11 and macOS (Apple Silicon and Intel). On macOS, grant Screen Recording and Accessibility permissions so a partner can see and control the Mac." } },
+        { "@type": "Question", "name": "Is UniDesk secure?", "acceptedAnswer": { "@type": "Answer", "text": "Connections are encrypted end to end with WebRTC DTLS-SRTP. Every session needs approval unless you enable unattended access, whose password is stored only as a PBKDF2 hash and checked with a one-time challenge, with lockout after 5 wrong attempts." } },
+        { "@type": "Question", "name": "How do I connect with UniDesk?", "acceptedAnswer": { "@type": "Answer", "text": "Open UniDesk on both computers, enter your partner's 9-digit address and press Connect. Your partner clicks Accept, or you enter the unattended-access password." } }
+      ]
+    }
+  ]
+}
+</script>
+<style>
+  :root { --bg:#070a14; --card:rgba(20,26,48,.65); --stroke:rgba(140,160,230,.16); --text:#eef1fb; --mute:#9aa3c4; --a1:#5b8cff; --a2:#a26bff; --grad:linear-gradient(135deg,var(--a1),var(--a2)); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#eef1f8; --card:rgba(255,255,255,.75); --stroke:rgba(40,55,120,.12); --text:#121833; --mute:#5f6888; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .bg { position:fixed; inset:0; z-index:-1; overflow:hidden; }
+  .bg i { position:absolute; width:60vmax; height:60vmax; border-radius:50%; filter:blur(100px); opacity:.28; animation:d 28s ease-in-out infinite alternate; }
+  .bg i:nth-child(1){ background:#3a5bff; top:-30vmax; left:-20vmax; } .bg i:nth-child(2){ background:#8b3dff; top:-20vmax; right:-25vmax; animation-delay:-9s; }
+  @keyframes d { to { transform:translate(8vmax,6vmax) scale(1.15); } }
+  @media (prefers-reduced-motion: reduce) { .bg i { animation:none; } }
+  a { color:inherit; }
+  .wrap { max-width:1120px; margin:0 auto; padding:0 16px; }
+  nav { display:flex; align-items:center; gap:10px; padding:20px 0; }
+  nav img { width:32px; height:32px; }
+  nav b { font-size:18px; } nav b span { background:var(--grad); -webkit-background-clip:text; color:transparent; }
+  nav .links { margin-left:auto; display:flex; gap:18px; font-size:14px; }
+  nav .links a { text-decoration:none; color:var(--mute); } nav .links a:hover { color:var(--text); }
+  header.hero { text-align:center; padding:56px 0 30px; }
+  .logo-big { width:96px; height:96px; filter:drop-shadow(0 16px 40px rgba(110,100,255,.55)); animation:f 5s ease-in-out infinite; }
+  @keyframes f { 50% { transform:translateY(-8px); } }
+  h1 { font-size:clamp(34px,6vw,64px); line-height:1.05; letter-spacing:-1.5px; margin:22px 0 14px; }
+  h1 .g { background:linear-gradient(90deg,#7aa2ff,#b98bff,#6fe3ff,#7aa2ff); background-size:300% 100%; -webkit-background-clip:text; color:transparent; animation:s 6s linear infinite; }
+  @keyframes s { to { background-position:300% 0; } }
+  .lead { font-size:clamp(16px,2.2vw,20px); color:var(--mute); max-width:720px; margin:0 auto 30px; }
+  .cta { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .btn { display:inline-flex; align-items:center; gap:10px; padding:14px 22px; border-radius:14px; font-weight:650; text-decoration:none; transition:transform .2s, box-shadow .2s; }
+  .btn.p { background:var(--grad); color:#fff; box-shadow:0 12px 30px -10px rgba(91,140,255,.9); }
+  .btn.s { border:1px solid var(--stroke); background:var(--card); backdrop-filter:blur(10px); }
+  .btn:hover { transform:translateY(-2px); }
+  .btn svg { width:20px; height:20px; fill:currentColor; }
+  .meta { margin-top:14px; font-size:13px; color:var(--mute); }
+  .shot { margin:46px auto 0; max-width:1000px; border-radius:18px; overflow:hidden; border:1px solid var(--stroke); box-shadow:0 40px 100px -30px rgba(0,0,0,.7); }
+  .shot img { display:block; width:100%; height:auto; }
+  section { padding:70px 0 10px; }
+  h2 { font-size:clamp(26px,3.5vw,38px); letter-spacing:-.8px; text-align:center; margin:0 0 10px; }
+  .sub { text-align:center; color:var(--mute); margin:0 0 34px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px; }
+  .f { padding:22px; border-radius:16px; background:var(--card); border:1px solid var(--stroke); backdrop-filter:blur(14px); }
+  .f .e { font-size:24px; } .f h3 { margin:10px 0 6px; font-size:16px; } .f p { margin:0; color:var(--mute); font-size:14px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--stroke); border-radius:16px; overflow:hidden; font-size:15px; }
+  th, td { padding:13px 16px; text-align:left; border-bottom:1px solid var(--stroke); }
+  th { font-size:13px; color:var(--mute); font-weight:600; } td:nth-child(2) { font-weight:650; }
+  .tw { overflow-x:auto; }
+  .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; counter-reset:n; }
+  .steps div { padding:22px; border-radius:16px; background:var(--card); border:1px solid var(--stroke); counter-increment:n; }
+  .steps div::before { content:counter(n); display:grid; place-items:center; width:32px; height:32px; border-radius:10px; background:var(--grad); color:#fff; font-weight:700; margin-bottom:10px; }
+  details { background:var(--card); border:1px solid var(--stroke); border-radius:14px; padding:16px 20px; margin-bottom:10px; }
+  summary { cursor:pointer; font-weight:650; } details p { color:var(--mute); margin:10px 0 0; }
+  .gal { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
+  .gal img { width:100%; border-radius:14px; border:1px solid var(--stroke); }
+  footer { padding:60px 0 40px; text-align:center; color:var(--mute); font-size:14px; }
+  @media (max-width:640px){ nav .links a:not(:last-child){ display:none; } }
+</style>
+</head>
+<body>
+<div class="bg" aria-hidden="true"><i></i><i></i></div>
+<div class="wrap">
+  <nav>
+    <img src="logo.svg" alt="UniDesk logo"><b>Uni<span>Desk</span></b>
+    <div class="links"><a href="#features">Features</a><a href="#compare">Compare</a><a href="#faq">FAQ</a><a href="https://github.com/dev-rehanify/UniDesk">GitHub</a></div>
+  </nav>
+
+  <header class="hero">
+    <img class="logo-big" src="logo.svg" alt="UniDesk remote desktop app icon">
+    <h1>UniDesk. <span class="g">Anywhere.</span> Instantly.</h1>
+    <p class="lead">The free, open-source remote desktop for <strong>Windows and Mac</strong>. Connect to any computer with a 9-digit address: peer-to-peer, end-to-end encrypted, up to 4K at 60 fps. A private alternative to AnyDesk and TeamViewer.</p>
+    <div class="cta">
+      <a class="btn p" href="https://github.com/dev-rehanify/UniDesk/releases/latest"><svg viewBox="0 0 24 24"><path d="M3 5.5 10 4.5v7H3zM11 4.4 21 3v8.5H11zM3 12.5h7v7l-7-1zM11 12.5h10V21l-10-1.4z"/></svg>Download for Windows</a>
+      <a class="btn p" href="https://github.com/dev-rehanify/UniDesk/releases/latest"><svg viewBox="0 0 24 24"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.6-1-2.6-3.8zM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4z"/></svg>Download for Mac</a>
+      <a class="btn s" href="https://github.com/dev-rehanify/UniDesk">View source on GitHub</a>
+    </div>
+    <p class="meta">Free forever · MIT licensed · No account needed · Windows 10/11 · macOS (Apple Silicon &amp; Intel)</p>
+    <div class="shot"><img src="screenshots/home-dark.png" alt="UniDesk remote desktop app: connect with a 9-digit address" width="1280" height="800"></div>
+  </header>
+
+  <section id="features">
+    <h2>Everything you need from remote desktop software</h2>
+    <p class="sub">Fast, private and packed with features, free for everyone.</p>
+    <div class="grid">
+      <div class="f"><div class="e">🔐</div><h3>End-to-end encrypted</h3><p>WebRTC DTLS-SRTP. Your screen goes straight to your partner, never through our servers.</p></div>
+      <div class="f"><div class="e">⚡</div><h3>4K 60 fps, low latency</h3><p>AV1, VP9 and H.264 with screen-content tuning and live stats.</p></div>
+      <div class="f"><div class="e">🔑</div><h3>Unattended access</h3><p>Connect to your own PCs with a password. Hashed, challenge–response, brute-force lockout.</p></div>
+      <div class="f"><div class="e">🖥️</div><h3>Multi-monitor</h3><p>Switch remote screens from live thumbnails or keyboard shortcuts.</p></div>
+      <div class="f"><div class="e">📋</div><h3>Clipboard sync</h3><p>Copy here, paste there, plus "type my clipboard" for fields that block paste.</p></div>
+      <div class="f"><div class="e">📁</div><h3>File transfer</h3><p>Drag and drop files onto the remote screen.</p></div>
+      <div class="f"><div class="e">🎥</div><h3>Record &amp; screenshot</h3><p>Save sessions as video and capture screenshots in one click.</p></div>
+      <div class="f"><div class="e">🔁</div><h3>Auto-reconnect</h3><p>Dropped Wi-Fi? UniDesk reconnects by itself.</p></div>
+      <div class="f"><div class="e">🛡️</div><h3>Host controls</h3><p>View-only, block files or clipboard, idle disconnect, lock the PC when a session ends.</p></div>
+      <div class="f"><div class="e">📒</div><h3>Address book</h3><p>Name and pin your desks; see remote PC info at a glance.</p></div>
+      <div class="f"><div class="e">🔗</div><h3>Invite links</h3><p>Send a link; it opens UniDesk and connects in one click.</p></div>
+      <div class="f"><div class="e">✏️</div><h3>Draw on their screen</h3><p>Circle the button you mean: strokes appear on their real screen.</p></div>
+      <div class="f"><div class="e">🌐</div><h3>Your own servers</h3><p>Optional private signaling and TURN relay for locked-down networks.</p></div>
+      <div class="f"><div class="e">📶</div><h3>LAN mode</h3><p>On the same network? Connect with no internet server at all.</p></div>
+      <div class="f"><div class="e">🔄</div><h3>Automatic updates</h3><p>Always on the latest build, verified and installed for you.</p></div>
+      <div class="f"><div class="e">💬</div><h3>Chat</h3><p>Message your partner without leaving the session.</p></div>
+      <div class="f"><div class="e">🎨</div><h3>Beautiful by design</h3><p>Dark, light and system themes with six accent colours.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>See UniDesk in action</h2>
+    <p class="sub">A modern interface that stays out of your way.</p>
+    <div class="gal">
+      <img src="screenshots/home-light.png" alt="UniDesk light theme home screen" loading="lazy">
+      <img src="screenshots/unattended-prompt.png" alt="UniDesk unattended access password prompt" loading="lazy">
+      <img src="screenshots/settings-appearance.png" alt="UniDesk appearance settings with themes and accent colours" loading="lazy">
+      <img src="screenshots/settings-security.png" alt="UniDesk security settings for unattended access" loading="lazy">
+    </div>
+  </section>
+
+  <section id="how">
+    <h2>Connect in seconds</h2>
+    <p class="sub">No sign-up, no port forwarding, no configuration.</p>
+    <div class="steps">
+      <div><strong>Open UniDesk</strong><br><span style="color:var(--mute)">on both computers.</span></div>
+      <div><strong>Enter the 9-digit address</strong><br><span style="color:var(--mute)">of the computer you want to reach.</span></div>
+      <div><strong>Get accepted</strong><br><span style="color:var(--mute)">or use your unattended-access password.</span></div>
+    </div>
+  </section>
+
+  <section id="compare">
+    <h2>UniDesk vs AnyDesk vs TeamViewer</h2>
+    <p class="sub">The open-source remote desktop that respects your privacy.</p>
+    <div class="tw"><table>
+      <tr><th></th><th>UniDesk</th><th>AnyDesk</th><th>TeamViewer</th></tr>
+      <tr><td>Price</td><td>Free forever</td><td>Free for personal use</td><td>Free for personal use</td></tr>
+      <tr><td>Open source</td><td>Yes (MIT)</td><td>No</td><td>No</td></tr>
+      <tr><td>Account required</td><td>No</td><td>No</td><td>Often</td></tr>
+      <tr><td>Peer-to-peer video</td><td>Yes</td><td>Yes</td><td>Partly</td></tr>
+      <tr><td>Unattended access</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td>Windows &amp; Mac</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td>Self-hostable</td><td>Yes</td><td>Enterprise</td><td>Enterprise</td></tr>
+    </table></div>
+  </section>
+
+  <section id="faq">
+    <h2>Frequently asked questions</h2>
+    <p class="sub">&nbsp;</p>
+    <details open><summary>Is UniDesk really free?</summary><p>Yes. UniDesk is free forever and open source under the MIT license: no account, subscription or commercial-use fee.</p></details>
+    <details><summary>Is UniDesk a good AnyDesk or TeamViewer alternative?</summary><p>UniDesk covers the core features (address-based connections, remote control, unattended access, file transfer, clipboard sync and multi-monitor) and keeps your video peer-to-peer.</p></details>
+    <details><summary>Does UniDesk work on Mac?</summary><p>Yes, on macOS for Apple Silicon and Intel. Grant Screen Recording and Accessibility in System Settings so a partner can see and control your Mac. The first time, right-click the app and choose Open.</p></details>
+    <details><summary>Is it secure?</summary><p>Connections are end-to-end encrypted. Every session needs your approval unless you enable unattended access, whose password is never stored, only a PBKDF2 hash, with lockout after 5 wrong tries.</p></details>
+    <details><summary>Why does Windows or macOS warn me when I open it?</summary><p>UniDesk isn't code-signed yet (certificates cost money). The source is public so anyone can audit it, and you can build it yourself with <code>npm start</code>.</p></details>
+  </section>
+
+  <footer>
+    <p><strong>UniDesk</strong> · UniDesk. Anywhere. Instantly.</p>
+    <p>Made by <a href="https://github.com/dev-rehanify">dev-rehanify</a> · <a href="https://github.com/dev-rehanify/UniDesk/blob/main/LICENSE">MIT License</a> · <a href="https://github.com/dev-rehanify/UniDesk/issues">Report an issue</a></p>
+  </footer>
+</div>
+</body>
+</html>

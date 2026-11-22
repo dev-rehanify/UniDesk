@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join a UniDesk session</title>
+<meta name="description" content="Someone invited you to connect with UniDesk, the free open-source remote desktop for Windows and Mac.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+  :root { --bg:#070a14; --card:rgba(20,26,48,.7); --stroke:rgba(140,160,230,.18); --text:#eef1fb; --mute:#9aa3c4; --grad:linear-gradient(135deg,#5b8cff,#a26bff); }
+  @media (prefers-color-scheme: light) { :root { --bg:#eef1f8; --card:rgba(255,255,255,.85); --stroke:rgba(40,55,120,.14); --text:#121833; --mute:#5f6888; } }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:16px; background:var(--bg); color:var(--text); font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; }
+  body::before { content:""; position:fixed; inset:-20%; z-index:-1; background:radial-gradient(40% 40% at 25% 20%,rgba(58,91,255,.35),transparent 70%),radial-gradient(40% 40% at 80% 15%,rgba(139,61,255,.3),transparent 70%); filter:blur(30px); }
+  .card { width:min(440px,100%); padding:32px 28px; border-radius:22px; background:var(--card); border:1px solid var(--stroke); backdrop-filter:blur(20px); text-align:center; box-shadow:0 30px 80px -30px rgba(0,0,0,.6); }
+  img { width:72px; height:72px; filter:drop-shadow(0 12px 28px rgba(110,100,255,.5)); }
+  h1 { font-size:22px; margin:16px 0 4px; }
+  .id { font:700 30px/1.2 ui-monospace,"SF Mono",Consolas,monospace; letter-spacing:3px; margin:14px 0 4px; background:var(--grad); -webkit-background-clip:text; color:transparent; }
+  p { color:var(--mute); margin:0 0 20px; font-size:14px; }
+  .btn { display:flex; justify-content:center; align-items:center; gap:8px; width:100%; padding:14px; border-radius:14px; font-weight:650; text-decoration:none; margin-top:10px; border:0; cursor:pointer; font-size:15px; }
+  .p { background:var(--grad); color:#fff; box-shadow:0 12px 30px -10px rgba(91,140,255,.9); }
+  .s { background:transparent; color:var(--text); border:1px solid var(--stroke); }
+  .small { font-size:12px; color:var(--mute); margin-top:18px; }
+  .err { color:#ff5470; }
+</style>
+</head>
+<body>
+<main class="card">
+  <img src="logo.svg" alt="UniDesk">
+  <h1>You're invited to connect</h1>
+  <div class="id" id="id">— — —</div>
+  <p id="msg">Open UniDesk to connect to this desk. The other person still has to accept.</p>
+  <a class="btn p" id="open" href="#">Open in UniDesk</a>
+  <a class="btn s" href="https://github.com/dev-rehanify/UniDesk/releases/latest">Don't have UniDesk? Download it free</a>
+  <div class="small">Already installed but nothing happened? Open UniDesk and type the address above.<br><a href="https://dev-rehanify.github.io/UniDesk/" style="color:inherit">What is UniDesk?</a></div>
+</main>
+<script>
+  const id = (location.hash.slice(1) || '').replace(/\D/g, '');
+  if (/^\d{9}$/.test(id)) {
+    document.getElementById('id').textContent = id.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
+    const link = 'unidesk://connect/' + id;
+    document.getElementById('open').href = link;
+    setTimeout(() => { location.href = link; }, 400);
+  } else {
+    document.getElementById('msg').innerHTML = '<span class="err">This invite link is incomplete.</span> Ask for a new one.';
+    document.getElementById('open').style.display = 'none';
+  }
+</script>
+</body>
+</html>

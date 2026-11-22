@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dev-rehanify.github.io/UniDesk/sitemap.xml

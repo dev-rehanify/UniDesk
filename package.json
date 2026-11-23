@@ -47,6 +47,7 @@
   },
   "build": {
     "appId": "com.unidesk.app",
+    "afterPack": "scripts/after-pack.js",
     "productName": "UniDesk",
     "files": [
       "**/*",

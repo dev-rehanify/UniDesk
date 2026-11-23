@@ -1027,6 +1027,35 @@ fillNetForm();
 // ================= INVITE LINKS =================
 const inviteUrl = () => `https://dev-rehanify.github.io/UniDesk/connect.html#${myId}`;
 $('inviteBtn').onclick = () => { if (!myId) return; navigator.clipboard.writeText(inviteUrl()); toast('Invite link copied: anyone who opens it connects to you (you still approve)', 3200); };
+// Control this PC from a phone: a QR code that opens the mobile viewer with this address filled in
+const phoneUrl = () => `https://dev-rehanify.github.io/UniDesk/m/?id=${myId}`;
+let qrLib = null;
+const loadQr = () => qrLib || (qrLib = new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'node_modules/qrcode-generator/qrcode.js'; s.onload = () => res(window.qrcode); s.onerror = rej; document.head.appendChild(s); }));
+async function showPhoneQr(force) {
+  const pop = $('qrPop'), open = force ?? !pop.classList.contains('show');
+  pop.classList.toggle('show', open); $('phoneBtn').classList.toggle('on', open);
+  if (!open || !myId) return;
+  try {
+    const qrcode = await loadQr(); const qr = qrcode(0, 'M'); qr.addData(phoneUrl()); qr.make();
+    $('qrBox').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+    $('qrBox').dataset.url = phoneUrl();
+  } catch { $('qrBox').textContent = 'QR code unavailable'; }
+  placeQr();
+}
+// keep the popup next to its button and fully inside the window (below it if there's room, otherwise above)
+function placeQr() {
+  const pop = $('qrPop'); if (!pop.classList.contains('show')) return;
+  const b = $('phoneBtn').getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, gap = 10, m = 8;
+  let top = b.bottom + gap; if (top + h > innerHeight - m) top = b.top - gap - h; top = Math.max(m, Math.min(top, innerHeight - m - h));
+  const left = Math.max(m, Math.min(b.right - w, innerWidth - m - w));
+  pop.style.top = top + 'px'; pop.style.left = left + 'px';
+}
+window.addEventListener('resize', placeQr);
+document.body.appendChild($('qrPop'));   // out of the card: a transformed parent would clip it and break fixed positioning
+$('phoneBtn').onclick = (e) => { e.stopPropagation(); showPhoneQr(); };
+$('qrPop').addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => { if ($('qrPop').classList.contains('show')) showPhoneQr(false); });
+$('qrCopy').onclick = () => { navigator.clipboard.writeText(phoneUrl()); toast('Phone link copied: open it on your phone to control this PC', 2600); };
 const peerReady = () => new Promise((res) => {
   if (peer?.open) return res(true);
   const t = setTimeout(() => res(false), 15000);
@@ -1705,7 +1734,7 @@ async function onPiRequest(m) {
 let piTimer = null, piBusy = false, piFirst = true;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const fmtUp = (s) => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), mi = Math.floor(s % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${mi}m` : `${mi}m`; };
-const bar = (pct) => `<div class="pi-bar${pct >= 90 ? ' hot' : ''}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;
+const bar = (pct, hot = pct >= 90) => `<div class="pi-bar${hot ? ' hot' : ''}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;   // red = nearly full (usage) or nearly empty (battery)
 async function refreshPi() {
   if (piBusy) return; piBusy = true;
   const r = await piAsk('info', {}); piBusy = false;
@@ -1718,7 +1747,7 @@ async function refreshPi() {
     `<div class="pi-card"><h4>CPU</h4><div class="v">${i.cpuPct}%</div><div class="s">${esc(i.cpu)} · ${i.cores} cores</div>${bar(i.cpuPct)}</div>`,
     `<div class="pi-card"><h4>Memory</h4><div class="v">${memPct}%</div><div class="s">${fmtSize(usedMem)} of ${fmtSize(i.mem.total)}</div>${bar(memPct)}</div>`,
     `<div class="pi-card"><h4>Up for</h4><div class="v">${fmtUp(i.uptime)}</div><div class="s">since ${new Date(Date.now() - i.uptime * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</div></div>`,
-    `<div class="pi-card"><h4>Battery</h4><div class="v">${i.battery ? i.battery.pct + '%' : 'None'}</div><div class="s">${i.battery ? (i.battery.charging ? 'Plugged in' : 'On battery') : 'Desktop PC or no battery found'}</div>${i.battery ? bar(i.battery.pct) : ''}</div>`
+    `<div class="pi-card"><h4>Battery</h4><div class="v">${i.battery ? i.battery.pct + '%' : 'None'}</div><div class="s">${i.battery ? (i.battery.charging ? 'Plugged in' : 'On battery') : 'Desktop PC or no battery found'}</div>${i.battery ? bar(i.battery.pct, i.battery.pct <= 15) : ''}</div>`
   ];
   if (i.disks?.length) cards.push(`<div class="pi-card wide"><h4>Disks</h4>${i.disks.map(d => { const pct = Math.round((d.total - d.free) / d.total * 100); return `<div class="pi-row"><span>${esc(d.name)}</span><span>${fmtSize(d.free)} free of ${fmtSize(d.total)}</span></div>${bar(pct)}`; }).join('')}</div>`);
   if (i.nets?.length) cards.push(`<div class="pi-card wide"><h4>Network</h4>${i.nets.map(n => `<div class="pi-row"><span>${esc(n.name)}</span><span class="mono">${esc(n.ip)} · ${esc(n.mac)}</span></div>`).join('')}</div>`);

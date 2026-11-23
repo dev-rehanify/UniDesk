@@ -78,6 +78,15 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
 #kb { position: fixed; left: -200px; top: 0; width: 120px; height: 40px; opacity: 0; font-size: 16px; }
 .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(10px); padding: 10px 16px; border-radius: 12px; background: rgba(20,24,40,.95); border: 1px solid var(--stroke); font-size: 13.5px; opacity: 0; transition: .25s; z-index: 40; pointer-events: none; max-width: 90vw; text-align: center; }
 .toast.on { opacity: 1; transform: translateX(-50%); }
+.send { text-align: left !important; }
+.send h3 { text-align: center; margin-bottom: 12px !important; }
+.txt { height: auto; padding: 10px 14px; margin-top: 14px; resize: none; font-family: inherit; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.row2 .ghost { font-size: 13px; }
+.prog { height: 6px; margin-top: 12px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; display: none; }
+.prog.on { display: block; }
+.prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--a1), var(--a2)); transition: width .2s; }
+.prog-txt { min-height: 18px; margin-top: 6px; font-size: 12.5px; color: var(--mute); text-align: center; }
 .help { margin: 10px 0 0; padding: 0; list-style: none; color: var(--mute); font-size: 13px; text-align: left; display: grid; gap: 4px; }
 .help b { color: var(--text); font-weight: 600; }
 </style>
@@ -121,6 +130,7 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
   <nav class="bar">
     <button id="kbBtn"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 15h10"/></svg>Keyboard</button>
     <button id="keysBtn"><svg viewBox="0 0 24 24"><path d="M15 7a4 4 0 1 1-3.9 4.9L3 20l-1-1 1-3 2 1 1-2 2 1 2.1-2.1A4 4 0 0 1 15 7z"/></svg>Keys</button>
+    <button id="sendBtn"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Send</button>
     <button id="scrBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span id="scrTxt">Screen 1</span></button>
     <button id="hdBtn"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4z"/><path d="M8 10v4M8 12h3M11 10v4M14 10v4h1.5a2 2 0 0 0 0-4z"/></svg>HD</button>
     <button id="endBtn" class="end"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>End</button>
@@ -133,6 +143,15 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
   <input class="pw" id="pwIn" type="password" placeholder="Password or code" autocomplete="off">
   <button class="go" id="pwGo" type="submit">Unlock</button><button class="ghost" id="askBtn" type="button">Ask to be let in</button><button class="ghost" id="pwCancel" type="button">Cancel</button>
   <div class="hint" id="pwErr"></div></div></form>
+<div class="sheet" id="sendSheet"><div class="card send">
+  <h3>Send to the PC</h3>
+  <button class="go" id="pickBtn" type="button">Photos &amp; files</button>
+  <input type="file" id="pick" multiple hidden>
+  <div class="prog" id="prog"><i id="progBar"></i></div><div class="prog-txt" id="progTxt"></div>
+  <textarea class="pw txt" id="txtIn" placeholder="Text, a link or a password" rows="3" spellcheck="false"></textarea>
+  <div class="row2"><button class="ghost" id="clipBtn" type="button">Copy to PC clipboard</button><button class="ghost" id="typeBtn" type="button">Type it on the PC</button></div>
+  <button class="ghost" id="sendClose" type="button">Close</button>
+</div></div>
 <div class="toast" id="toast"></div>
 
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" integrity="sha384-x0YgkOr/3UOZP2CRDxGW9e0Q+2Qjyr3uJrm4xU32Y7ZCNAo7Cc7bjhrZMi/dwczu" crossorigin="anonymous"></script>
@@ -146,7 +165,7 @@ const fmt = (id) => String(id).replace(/(\d{3})(?=\d)/g, '$1 ');
 let toastT; function toast(m, ms = 2200) { const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 function show(v) { document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === v)); }
-function sheet(id) { ['waitSheet', 'pwSheet'].forEach(s => $(s).classList.toggle('on', s === id)); }
+function sheet(id) { ['waitSheet', 'pwSheet', 'sendSheet'].forEach(s => $(s).classList.toggle('on', s === id)); }
 
 // ---------- identity & signaling ----------
 let peer = null, myId = store.get('udm-id', null), conn = null, call = null, target = null, auth = null, inSession = false, connectTimer = null;
@@ -443,6 +462,50 @@ $('keys').addEventListener('click', (e) => {
     else key(b.dataset.k);
   }
 });
+// ---------- send files and text to the PC ----------
+// Same messages as the desktop app's file transfer and clipboard sync; the PC decides what it accepts.
+let sending = false;
+$('sendBtn').onclick = () => { if (!inSession) return; $('progTxt').textContent = ''; sheet('sendSheet'); };
+$('sendClose').onclick = () => { if (!sending) sheet(null); };
+$('pickBtn').onclick = () => {
+  if (remotePerms.files === false) return toast('Your partner hasn’t allowed file transfer', 2200);
+  $('pick').click();
+};
+$('pick').onchange = (e) => { const f = [...e.target.files]; e.target.value = ''; if (f.length) sendFiles(f); };
+async function sendFiles(files) {
+  if (sending) return; sending = true;
+  const CH = 48 * 1024, total = files.reduce((a, f) => a + f.size, 0) || 1; let done = 0;
+  $('prog').classList.add('on'); $('progBar').style.width = '0%';
+  try {
+    for (const f of files) {
+      if (!conn?.open) throw new Error('closed');
+      $('progTxt').textContent = 'Sending ' + f.name + '…';
+      const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
+      send({ t: 'file-start', id, name: f.name, size: f.size });
+      for (let o = 0; o < f.size || (o === 0 && f.size === 0); o += CH) {
+        const part = new Uint8Array(await f.slice(o, o + CH).arrayBuffer());
+        let bin = ''; for (let i = 0; i < part.length; i += 8192) bin += String.fromCharCode.apply(null, part.subarray(i, i + 8192));
+        send({ t: 'file-chunk', id, b64: btoa(bin) });
+        const dc = conn?.dataChannel; while (dc && dc.bufferedAmount > 2 * 1024 * 1024) await new Promise(r => setTimeout(r, 30));
+        done += part.length; $('progBar').style.width = Math.round(done / total * 100) + '%';
+        if (!part.length) break;
+      }
+      send({ t: 'file-end', id });
+    }
+    $('progTxt').textContent = files.length === 1 ? `Sent ${files[0].name} to the PC’s Downloads\\UniDesk folder` : `Sent ${files.length} files to the PC’s Downloads\\UniDesk folder`;
+  } catch { $('progTxt').textContent = 'Sending stopped: the connection closed'; }
+  sending = false; setTimeout(() => $('prog').classList.remove('on'), 800);
+}
+$('clipBtn').onclick = () => {
+  const t = $('txtIn').value; if (!t) return;
+  if (remotePerms.clip === false) return toast('Your partner hasn’t allowed clipboard access', 2200);
+  send({ t: 'clip', text: t.slice(0, 100000) }); toast('Copied to the PC’s clipboard', 1800);
+};
+$('typeBtn').onclick = () => {
+  const t = $('txtIn').value; if (!t) return;
+  if (!canControl()) return toast('View only: your partner turned off control', 2000);
+  sheet(null); typeText(t.slice(0, 5000)); toast('Typing on the PC…', 1600);
+};
 // keep the session alive when the phone locks briefly; release held buttons if the page is hidden
 document.addEventListener('visibilitychange', () => { if (document.hidden && one?.drag) { input({ t: 'up', b: 0 }); one = null; } });
 </script>

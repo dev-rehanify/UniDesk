@@ -64,8 +64,10 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 | 💬 **Chat & voice** | Built-in peer-to-peer chat and two-way voice with echo cancellation. |
 | 🎥 **Record & screenshot** | Save sessions as WebM and capture remote screenshots. |
 | 🔁 **Auto-reconnect** | Recovers from dropped connections automatically. |
-| 📒 **Address book** | Name, pin and search your desks, with remote PC info (name, OS, RAM, cores). Export and import it as a file to move to a new PC (passwords are never included). |
+| 📒 **Address book** | Name, pin and search your desks, with remote PC info (name, OS, RAM, cores). Add notes to any desk (who uses it, where it is) and search by them. Export and import it as a file to move to a new PC (passwords are never included). |
 | ✎ **Text snippets** | Save commands, email addresses and other text you type often, then type them on the remote PC in one click. |
+| 📋 **Clipboard history** | Everything copied on the remote PC during a session is listed in the snippets panel: copy it again, type it there, or keep it as a snippet. Kept in memory only and cleared when the session ends. |
+| ⏱️ **Session time limit** | End every incoming session after 30 minutes, 1 hour or 2 hours. The visitor is warned a minute before. |
 | 🛡️ **Host controls** | View-only mode, block files/clipboard, idle auto-disconnect, **lock PC when a session ends**, session history. |
 | 🎨 **Beautiful UI** | Dark / light / system themes, 6 accent colours, smooth animations, reduce-motion option. |
 | 🧭 **Always reachable** | Runs in the tray, optional start with Windows. |

@@ -669,3 +669,13 @@ html.mac .aurora { background: var(--bg); }
   .hosting .pill-btn { padding: 6px 11px; }
   .tb-id { max-width: 200px; }
 }
+
+/* clipboard history in the snippets panel */
+.sn-sec { padding: 10px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--mute); }
+.sn-item.clip { gap: 6px; }
+.sn-item.clip .btn-soft { padding: 5px 9px; font-size: 12px; flex: none; }
+@media (max-width: 420px) { .sn-item.clip { flex-wrap: wrap; } .sn-item.clip .t { flex-basis: 100%; } }
+/* desk notes */
+.desk-txt .desk-note { font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+.modal-card textarea { width: 100%; padding: 10px 13px; margin-top: 8px; border-radius: 11px; border: 1px solid var(--stroke); background: var(--field-bg); color: inherit; font: inherit; font-size: 13.5px; resize: vertical; min-height: 64px; max-height: 180px; outline: none; transition: border-color .2s, box-shadow .2s; }
+.modal-card textarea:focus { border-color: var(--a1); box-shadow: 0 0 0 4px rgba(91,140,255,.14); }

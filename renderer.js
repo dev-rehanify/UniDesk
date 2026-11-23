@@ -30,7 +30,7 @@ let screens = [], curScreen = 0, remoteScreens = [], connectTimer = null;
 
 // ================= SETTINGS & THEME =================
 const DEFAULTS = { theme: 'system', accent: 'violet', calm: false, quality: 'balanced', clip: true, stats: true, autoFull: false,
-  audio: true, allowControl: true, allowFiles: true, allowClip: true, allowTerminal: false, unattended: false, otp: false, allowBrowse: false, tray: true, startup: false, lockOnEnd: 'never', idleMins: '0', lan: true, allowOnly: false, allowIds: '', hideWall: true, recIncoming: false, recKeep: '30' };
+  audio: true, allowControl: true, allowFiles: true, allowClip: true, allowTerminal: false, unattended: false, otp: false, allowBrowse: false, tray: true, startup: false, lockOnEnd: 'never', idleMins: '0', maxMins: '0', lan: true, allowOnly: false, allowIds: '', hideWall: true, recIncoming: false, recKeep: '30' };
 const ACCENTS = {
   violet: ['#5b8cff', '#a26bff'], ocean: ['#2f9bff', '#22d3c5'], sunset: ['#ff6a5b', '#ffb347'],
   emerald: ['#1fcf8f', '#3aa0ff'], rose: ['#ff4f8b', '#b36bff'], mono: ['#7b86a8', '#aab3d6']
@@ -481,7 +481,7 @@ function wireData(c) {
       case 'screens': remoteScreens = m.list; curScreen = m.cur; renderScreens(); break;
       case 'screen': curScreen = m.i; renderScreens(); setTimeout(() => $('video').classList.remove('switching'), 250); toast(`Now viewing Screen ${m.i + 1}`, 1600); break;
       case 'thumbs': if (role === 'host') sendScreens(); break;
-      case 'clip': if (role === 'host' && !P.clip) break; lastClip = m.text; window.dw.clipWrite(m.text); break;
+      case 'clip': if (role === 'host' && !P.clip) break; lastClip = m.text; window.dw.clipWrite(m.text); if (role === 'viewer') addClipHist(m.text); break;
       case 'chat': addChat(m.text, false); break;
       case 'perms': {
         const was = remotePerms; remotePerms = m;
@@ -618,7 +618,7 @@ $('chatSend').onclick = sendChat;
 $('chatInput').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') sendChat(); if (e.key === 'Escape') toggleChat(false); });
 
 // ---- reconnect / idle / lock ----
-let inSession = false, byeReceived = false, reconnectTries = 0, hostHow = null, lastActivity = 0, idleTimer = null;
+let inSession = false, byeReceived = false, reconnectTries = 0, hostHow = null, lastActivity = 0, idleTimer = null, limitWarned = false;
 const MAX_RETRIES = 3;
 function onViewerDrop() {
   if (role !== 'viewer') return;
@@ -633,15 +633,29 @@ function onViewerDrop() {
   endAll();
   if (dropped) toast('Connection lost', 2600);
 }
+const limitText = (m) => m >= 60 ? `${m / 60} hour${m === 60 ? '' : 's'}` : `${m} minutes`;
 function startIdleWatch() {
-  clearInterval(idleTimer); lastActivity = Date.now();
+  clearInterval(idleTimer); lastActivity = Date.now(); limitWarned = false;
   idleTimer = setInterval(() => {
     const mins = +S.idleMins || 0;
     if (role === 'host' && mins > 0 && Date.now() - lastActivity > mins * 60e3) {
       send({ t: 'chat', text: `Session ended after ${mins} min of inactivity.` });
-      toast(`Session ended: idle for ${mins} min`, 4000); endAll();
+      toast(`Session ended: idle for ${mins} min`, 4000); endAll(); return;
     }
-  }, 15000);
+    // Session length limit: warn the visitor a minute before, then end the session.
+    const max = +S.maxMins || 0;
+    if (role === 'host' && max > 0 && sessStart) {
+      const left = max * 60e3 - (Date.now() - sessStart);
+      if (left <= 0) {
+        send({ t: 'chat', text: `Session ended: this PC allows sessions of up to ${limitText(max)}.` });
+        toast(`Session ended: time limit of ${limitText(max)} reached`, 4000); endAll();
+      } else if (left <= 60e3 && !limitWarned) {
+        limitWarned = true;
+        send({ t: 'chat', text: `This session will end in about 1 minute (this PC allows sessions of up to ${limitText(max)}).` });
+        toast('The session will end in about 1 minute (time limit)', 4000);
+      }
+    }
+  }, 5000);
 }
 
 function endAll(opts = {}) {
@@ -652,7 +666,7 @@ function endAll(opts = {}) {
   $('recBadge').classList.remove('show');
   if (wasHost || hostBlock) { hostBlock = false; clearInterval(blockWatch); window.dw.blockInput(false); }
   setBlockBtn(false); $('blockBtn').style.display = 'none'; clearInterval(hbTimer);
-  togglePi(false); $('piBtn').style.display = 'none'; $('piBody').innerHTML = ''; toggleSn(false);
+  togglePi(false); $('piBtn').style.display = 'none'; $('piBody').innerHTML = ''; toggleSn(false); clipHist = [];
   if (wasHost || hostPrivacy) { hostPrivacy = false; window.dw.privacy(false); }
   setPrivBtn(false); $('privBtn').style.display = 'none'; fbAskClose();
   hostPaused = false; $('pauseBtn').classList.remove('on'); $('pauseLabel').textContent = 'Pause'; setPausedView(false); toggleBrowse(false); $('browseBtn').style.display = 'none'; toggleTm(false);
@@ -799,25 +813,26 @@ function loadRecents() {
   $('recentsTitle').textContent = all.some(x => x.fav) ? 'Desks' : 'Recent';
   const q = $('deskSearch').value.trim().toLowerCase(), qd = q.replace(/\D/g, '');
   $('deskSearch').hidden = all.length < 5 && !q;
-  const d = q ? all.filter(x => (x.name || '').toLowerCase().includes(q) || (qd && x.id.includes(qd))) : all;
+  const d = q ? all.filter(x => (x.name || '').toLowerCase().includes(q) || (x.note || '').toLowerCase().includes(q) || (qd && x.id.includes(qd))) : all;
   if (!all.length) { box.innerHTML = '<span class="empty">No saved desks yet</span>'; return; }
   if (!d.length) { box.innerHTML = '<span class="empty">No desks match your search</span>'; return; }
   d.slice(0, q ? 30 : 8).forEach((x, i) => {
     const el = document.createElement('div'); el.className = 'desk' + (x.fav ? ' fav' : ''); el.style.animationDelay = i * 40 + 'ms';
     el.innerHTML = `<button class="desk-main" title="Connect"><span class="desk-av">${(x.name || '#')[0].toUpperCase()}</span>
-        <span class="desk-txt"><b></b><small class="mono">${fmt(x.id)}</small></span></button>
+        <span class="desk-txt"><b></b><small class="mono">${fmt(x.id)}</small>${x.note ? '<small class="desk-note"></small>' : ''}</span></button>
       <div class="desk-acts">
         ${x.mac && !nearbyDesk(x.id) ? '<button class="wake" title="Wake up this PC (Wake-on-LAN)">⏻</button>' : ''}
         <button class="mini star" title="${x.fav ? 'Unpin' : 'Pin to top'}">${x.fav ? '★' : '☆'}</button>
-        <button class="mini" title="Rename">✎</button>
+        <button class="mini" title="Name and notes">✎</button>
         <button class="mini" title="Remove">✕</button>
       </div>`;
     el.querySelector('b').textContent = x.name || 'Unnamed desk';
+    if (x.note) { el.querySelector('.desk-note').textContent = x.note.replace(/\s+/g, ' '); el.querySelector('.desk-main').title = 'Connect\n\n' + x.note; }
     el.querySelector('.desk-main').onclick = () => connect(x.id);
     const [star, ren, del] = el.querySelectorAll('.mini');
     const wk = el.querySelector('.wake'); if (wk) wk.onclick = (e) => { e.stopPropagation(); wakeDesk(x); };
     star.onclick = () => { const all = readDesks(); const t = all.find(y => y.id === x.id); t.fav = !t.fav; writeDesks(all); };
-    ren.onclick = () => openNameDialog(x.id, x.name);
+    ren.onclick = () => openNameDialog(x.id, x.name, x.note);
     del.onclick = () => { writeDesks(readDesks().filter(y => y.id !== x.id)); window.dw.pwForget(x.id); toast('Desk removed', 1400); };
     box.appendChild(el);
   });
@@ -825,7 +840,7 @@ function loadRecents() {
 function saveRecent(id) {
   const all = readDesks(); const t = all.find(x => x.id === id);
   if (t) t.last = Date.now(); else all.push({ id, name: '', fav: false, last: Date.now() });
-  const keep = all.sort((a, b) => (b.fav - a.fav) || (b.last - a.last)).filter((x, i) => x.fav || x.name || x.mac || i < 12);
+  const keep = all.sort((a, b) => (b.fav - a.fav) || (b.last - a.last)).filter((x, i) => x.fav || x.name || x.mac || x.note || i < 12);
   writeDesks(keep);
 }
 function nameDeskIfUnnamed(id, name) {
@@ -833,18 +848,19 @@ function nameDeskIfUnnamed(id, name) {
   if (t && !t.name && name) { t.name = String(name).slice(0, 40); writeDesks(all); }
 }
 let renaming = null;
-function openNameDialog(id, name) {
-  renaming = id; $('nameInput').value = name || ''; $('nameDialog').classList.add('show');
+function openNameDialog(id, name, note) {
+  renaming = id; $('nameInput').value = name || ''; $('noteInput').value = note || ''; $('nameDialog').classList.add('show');
   setTimeout(() => { $('nameInput').focus(); $('nameInput').select(); }, 120);
 }
 function closeNameDialog() { $('nameDialog').classList.remove('show'); renaming = null; }
 $('nameCancel').onclick = closeNameDialog;
 $('nameSave').onclick = () => {
   const all = readDesks(); const t = all.find(x => x.id === renaming);
-  if (t) { t.name = $('nameInput').value.trim().slice(0, 40); writeDesks(all); }
+  if (t) { t.name = $('nameInput').value.trim().slice(0, 40); const n = $('noteInput').value.trim().slice(0, 300); if (n) t.note = n; else delete t.note; writeDesks(all); }
   closeNameDialog();
 };
 $('nameInput').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') $('nameSave').click(); if (e.key === 'Escape') closeNameDialog(); });
+$('noteInput').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('nameSave').click(); if (e.key === 'Escape') closeNameDialog(); });
 
 // ================= STATS =================
 let statsTimer, lastBytes = 0, lastTs = 0;
@@ -1656,7 +1672,7 @@ $('deskSearch').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { const first = $('recents').querySelector('.desk-main'); if (first) first.click(); }
 });
 function exportDesksData() {
-  const desks = readDesks().map(x => ({ id: x.id, name: x.name || '', fav: !!x.fav, last: x.last || 0, ...(x.mac ? { mac: x.mac } : {}) }));
+  const desks = readDesks().map(x => ({ id: x.id, name: x.name || '', fav: !!x.fav, last: x.last || 0, ...(x.mac ? { mac: x.mac } : {}), ...(x.note ? { note: x.note } : {}) }));
   return JSON.stringify({ app: 'UniDesk', kind: 'address-book', version: 1, exported: new Date().toISOString(), desks }, null, 2);
 }
 // Merge an exported address book into this one; returns how many desks were added / updated
@@ -1667,13 +1683,14 @@ function importDesksData(text) {
   const all = readDesks(); let added = 0, updated = 0;
   for (const raw of list.slice(0, 2000)) {
     const id = String(raw?.id ?? '').replace(/\D/g, ''); if (id.length !== 9) continue;
-    const name = String(raw.name || '').slice(0, 60), mac = /^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(raw.mac || '') ? raw.mac : undefined;
+    const note = String(raw.note || '').trim().slice(0, 300), name = String(raw.name || '').slice(0, 60), mac = /^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(raw.mac || '') ? raw.mac : undefined;
     const t = all.find(x => x.id === id);
-    if (!t) { all.push({ id, name, fav: !!raw.fav, last: Number(raw.last) || 0, ...(mac ? { mac } : {}) }); added++; continue; }
+    if (!t) { all.push({ id, name, fav: !!raw.fav, last: Number(raw.last) || 0, ...(mac ? { mac } : {}), ...(note ? { note } : {}) }); added++; continue; }
     let ch = false;
     if (name && !t.name) { t.name = name; ch = true; }
     if (raw.fav && !t.fav) { t.fav = true; ch = true; }
     if (mac && !t.mac) { t.mac = mac; ch = true; }
+    if (note && !t.note) { t.note = note; ch = true; }
     if (ch) updated++;
   }
   writeDesks(all); return { added, updated };
@@ -1694,9 +1711,35 @@ $('deskImport').onclick = async () => {
 // Saved texts the visitor can type on the remote PC with one click (stored only on this PC).
 const readSn = () => { try { const v = JSON.parse(localStorage.getItem('ud-snippets') || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
 const writeSn = (v) => { try { localStorage.setItem('ud-snippets', JSON.stringify(v.slice(0, 200))); } catch {} renderSn(); };
+// Texts copied on the remote PC during this session (newest first). Kept in memory only, cleared when the session ends.
+let clipHist = [];
+function addClipHist(text) {
+  if (typeof text !== 'string' || !text.trim()) return;
+  clipHist = [text, ...clipHist.filter(x => x !== text)].slice(0, 20);
+  if ($('sn').classList.contains('open')) renderSn();
+}
+function renderClipHist(box) {
+  if (!clipHist.length) return;
+  const h = document.createElement('div'); h.className = 'sn-sec'; h.textContent = 'Copied on their PC'; box.appendChild(h);
+  clipHist.forEach((text) => {
+    const el = document.createElement('div'); el.className = 'sn-item clip';
+    el.innerHTML = '<div class="t"><small></small></div><button class="btn-soft" data-a="copy" title="Put it on your clipboard">Copy</button><button class="btn-soft" data-a="type" title="Type it on their PC">Type</button><button class="btn-soft" data-a="save" title="Keep it as a snippet">Save</button>';
+    el.querySelector('small').textContent = text.replace(/\s+/g, ' ').slice(0, 120);
+    el.title = text.slice(0, 500);
+    el.querySelector('[data-a=copy]').onclick = () => { lastClip = text; window.dw.clipWrite(text); toast('Copied to your clipboard', 1400); };
+    el.querySelector('[data-a=type]').onclick = () => typeSnippet({ name: 'copied text', text });
+    el.querySelector('[data-a=save]').onclick = () => {
+      if (readSn().some(s => s.text === text)) return toast('Already in your snippets', 1400);
+      writeSn([{ id: crypto.randomUUID(), name: '', text: text.slice(0, 5000) }, ...readSn()]); toast('Saved as a snippet', 1400);
+    };
+    box.appendChild(el);
+  });
+  const s = document.createElement('div'); s.className = 'sn-sec'; s.textContent = 'Your snippets'; box.appendChild(s);
+}
 function renderSn() {
   const list = readSn(), box = $('snList'); box.innerHTML = '';
-  if (!list.length) { box.innerHTML = '<div class="fb-msg">No snippets yet. Save text you type often, like a command or an email address.</div>'; return; }
+  renderClipHist(box);
+  if (!list.length) { box.insertAdjacentHTML('beforeend', '<div class="fb-msg">No snippets yet. Save text you type often, like a command or an email address.</div>'); return; }
   list.forEach((s) => {
     const el = document.createElement('div'); el.className = 'sn-item';
     el.innerHTML = '<div class="t"><b></b><small></small></div><button class="btn-soft" data-a="type">Type</button><span class="fb-act del" data-a="del" title="Delete"><svg class="ic"><use href="#i-trash"/></svg></span>';

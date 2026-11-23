@@ -29,18 +29,35 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 |---|---|
 | 🔐 **End-to-end encrypted** | WebRTC DTLS-SRTP. Every session needs approval unless *you* enable unattended access. |
 | ⚡ **Fast P2P streaming** | AV1 → VP9 → H.264 codec preference, up to **4K at 60 fps**, low-latency playout, live stats (codec, fps, Mbps, ping). |
+| 🔢 **One-time access codes** | A temporary code (like TeamViewer's password) that works once and then changes. |
+| 🗂️ **Remote file manager** | Browse the other PC's drives, download, upload into any folder, create folders, rename and delete (to the Recycle Bin): only when allowed. |
+| 🕶️ **Privacy screen** | Black out the remote PC's monitors while you work; you still see the real desktop. The person there can press `Ctrl+Alt+Shift+P` to show it again (Windows). |
+| ⏸️ **Pause sharing** | The host can freeze the screen (e.g. while typing a password); remote input is blocked while paused. |
+| 🚫 **Block their input** | Lock the remote mouse and keyboard while you work (Windows). Lifted automatically when the session ends, control is taken back or the connection goes quiet; Ctrl+Alt+Del there always lifts it. |
+| 🖼️ **Plain wallpaper** | The host's wallpaper is hidden during sessions for a faster, sharper picture, and comes back when the visitor leaves (Windows). |
+| 📊 **Remote task manager** | See the other PC's processes with live CPU and memory, search them and end a frozen app. |
+| ⏺️ **Record incoming sessions** | Optional security log: every session on your PC is saved to Videos\UniDesk\Incoming, old recordings are cleaned up after 7/30/90 days, and visitors always see a REC badge. |
+| ⏻ **Sleep, sign out, shut down** | Power options for the remote PC in the Keys menu (needs control). |
+| ⟳ **Restart & reconnect** | Restart the remote PC and UniDesk waits for it, then reconnects by itself. |
+| 🛡️ **Allow-list** | Only accept connections from the desks you list; everyone else is turned away automatically. |
 | 🔑 **Unattended access** | Password-protected access without clicking Accept. Password stored only as a PBKDF2 hash; challenge–response login; 5 wrong tries locks it for 15 min. |
 | 🖥️ **Multi-monitor** | Switch remote screens from live thumbnails or with `Ctrl+Alt+←/→`. |
-| 📋 **Clipboard sync** | Copy on one PC, paste on the other, plus **"Type my clipboard"** for password fields that block paste. |
+| 📋 **Clipboard sync** | Text **and images**: copy on one PC, paste on the other, plus **"Type my clipboard"** for password fields that block paste. |
 | 📁 **File transfer** | Drag & drop files onto the remote screen, both ways. |
 | 🔗 **Invite links** | Share a link; opening it launches UniDesk and connects (you still approve). |
 | ✏️ **Draw on their screen** | Point things out: strokes appear on the other person's real screen and fade away. |
 | 🌐 **Your own servers** | Optional custom signaling server and TURN relay for strict corporate/mobile networks. |
 | 🔄 **Automatic updates** | New builds download, verify (SHA-256) and install themselves, never during a session. |
+| 📶 **Live connection quality** | Signal bars and a session timer on both sides. |
+| ✋ **Request control** | View-only visitors can ask for control; the host allows it with one click. |
+| ✅ **Smart access requests** | Choose full control or view-only, plus files, clipboard and terminal, before accepting. Auto-declines after 30 s. |
+| 🖥️ **Remote terminal** | Run PowerShell (Windows) or shell (macOS) commands on the remote PC, only when allowed. |
+| ⏻ **Wake-on-LAN** | Wake sleeping PCs on your network from the address book. |
+| ⌨️ **System keys** | In fullscreen, Alt+Tab and the Windows key go to the remote PC. |
 | 📶 **LAN mode** | Desks on the same network find each other and connect with **no internet server at all**. |
-| 🛡️ **Admin & UAC** | Run as administrator and let visitors answer UAC prompts (Windows). |
+| 🛡️ **Lock screen, UAC & Ctrl+Alt+Del** | A built-in Windows service streams the secure desktop, so visitors can unlock, approve UAC prompts and press Ctrl+Alt+Del. |
 | 🏠 **Self-host kit** | One `docker compose up` gives you your own signaling server + TURN relay ([server/](server/)). |
-| 💬 **Chat** | Built-in peer-to-peer chat. |
+| 💬 **Chat & voice** | Built-in peer-to-peer chat and two-way voice with echo cancellation. |
 | 🎥 **Record & screenshot** | Save sessions as WebM and capture remote screenshots. |
 | 🔁 **Auto-reconnect** | Recovers from dropped connections automatically. |
 | 📒 **Address book** | Name, pin and reorder your desks, with remote PC info (name, OS, RAM, cores). |
@@ -100,7 +117,8 @@ npm start
 
 - [x] Custom signaling + TURN relay settings
 - [ ] Code-signed installer
-- [ ] Windows system service (lock screen, Ctrl+Alt+Del, connect before sign-in)
+- [x] Windows system service (lock screen, UAC, Ctrl+Alt+Del)
+- [ ] Connect before anyone signs in (after a reboot)
 - [x] macOS builds (via GitHub Actions)
 - [ ] Linux builds
 - [ ] Mobile viewer
@@ -113,8 +131,8 @@ npm start
 
 ## Good to know
 
-- **UAC prompts:** supported when UniDesk runs as administrator with "Let visitors answer UAC prompts" on.
-- **Lock screen & Ctrl+Alt+Del:** Windows only allows these from a signed system service; this is on the roadmap.
+- **Runs as administrator** on Windows, so visitors can control admin apps and Task Manager.
+- **Lock screen, UAC prompts and Ctrl+Alt+Del** work through the built-in **UniDesk Secure Desktop service** (installed automatically, runs as SYSTEM, localhost-only, token-protected, removed on uninstall).
 
 ## Contributing
 

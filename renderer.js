@@ -30,7 +30,7 @@ let screens = [], curScreen = 0, remoteScreens = [], connectTimer = null;
 
 // ================= SETTINGS & THEME =================
 const DEFAULTS = { theme: 'system', accent: 'violet', calm: false, quality: 'balanced', clip: true, stats: true, autoFull: false,
-  audio: true, allowControl: true, allowFiles: true, allowClip: true, unattended: false, tray: true, startup: false, lockOnEnd: 'never', idleMins: '0', lan: true };
+  audio: true, allowControl: true, allowFiles: true, allowClip: true, allowTerminal: false, unattended: false, otp: false, allowBrowse: false, tray: true, startup: false, lockOnEnd: 'never', idleMins: '0', lan: true, allowOnly: false, allowIds: '', hideWall: true, recIncoming: false, recKeep: '30' };
 const ACCENTS = {
   violet: ['#5b8cff', '#a26bff'], ocean: ['#2f9bff', '#22d3c5'], sunset: ['#ff6a5b', '#ffb347'],
   emerald: ['#1fcf8f', '#3aa0ff'], rose: ['#ff4f8b', '#b36bff'], mono: ['#7b86a8', '#aab3d6']
@@ -59,10 +59,16 @@ function applyAll(animate) {
   document.querySelectorAll('[data-set]').forEach(i => { i.checked = !!S[i.dataset.set]; });
   document.querySelectorAll('[data-seg]').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === S[seg.dataset.seg])));
   document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('on', s.dataset.accent === S.accent));
+  $('allowWrap').style.display = S.allowOnly ? '' : 'none';
+  $('recKeepRow').style.display = S.recIncoming ? '' : 'none';
+  if (document.activeElement !== $('allowIds')) $('allowIds').value = S.allowIds || '';
 }
+// allow-list: 9-digit addresses, one per line
+const allowedIds = () => new Set(String(S.allowIds || '').split(/[\n,;]+/).map(s => s.replace(/\D/g, '')).filter(s => s.length === 9));
+const isAllowed = (peerId) => !S.allowOnly || allowedIds().has(String(peerId).replace(PREFIX, ''));
 function setSetting(k, v) {
   S[k] = v; saveSettings(); applyAll(k === 'theme');
-  if (role === 'host' && ['allowControl', 'allowFiles', 'allowClip'].includes(k)) sendPerms();
+  if (role === 'host' && ['allowControl', 'allowFiles', 'allowClip', 'allowTerminal', 'allowBrowse'].includes(k)) { P = { ...P, [{ allowControl: 'control', allowFiles: 'files', allowClip: 'clip', allowTerminal: 'terminal', allowBrowse: 'browse' }[k]]: !!v }; sendPerms(); if (k === 'allowTerminal' && !v) window.dw.termStop(); }
 }
 
 // swatches
@@ -74,6 +80,11 @@ Object.entries(ACCENTS).forEach(([name, [a, b]]) => {
 document.querySelectorAll('[data-theme-opt]').forEach(b => b.onclick = () => setSetting('theme', b.dataset.themeOpt));
 document.querySelectorAll('[data-set]').forEach(i => i.onchange = () => setSetting(i.dataset.set, i.checked));
 document.querySelectorAll('[data-seg]').forEach(seg => seg.querySelectorAll('button').forEach(b => b.onclick = () => setSetting(seg.dataset.seg, b.dataset.v)));
+$('allowIds').addEventListener('input', () => { S.allowIds = $('allowIds').value; saveSettings(); });
+$('allowIds').addEventListener('keydown', (e) => e.stopPropagation());
+$('allowIds').addEventListener('blur', () => {
+  const ids = [...allowedIds()]; S.allowIds = ids.map(fmt).join('\n'); saveSettings(); $('allowIds').value = S.allowIds;
+});
 $('themeBtn').onclick = () => setSetting('theme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 window.dw.onSystemTheme((d) => { systemDark = d; if (S.theme === 'system') applyTheme(true); });
 window.dw.systemDark().then(d => { systemDark = d; applyTheme(false); });
@@ -112,7 +123,15 @@ $('newIdBtn').onclick = () => {
 };
 applyAll(false);
 
-function sendPerms() { send({ t: 'perms', control: !!S.allowControl, files: !!S.allowFiles, clip: !!S.allowClip }); }
+// per-session permissions (chosen on the request card; unattended sessions use the defaults from Settings)
+let P = { control: true, files: true, clip: true, terminal: false, browse: false };
+const defaultPerms = () => ({ control: !!S.allowControl, files: !!S.allowFiles, clip: !!S.allowClip, terminal: !!S.allowTerminal, browse: !!S.allowBrowse });
+function sendPerms() {
+  // taking control away also lifts the privacy screen
+  if (!P.control && hostPrivacy) { hostPrivacy = false; window.dw.privacy(false); send({ t: 'privacy-r', on: false }); }
+  if (!P.control && hostBlock) unblockHost();
+  send({ t: 'perms', ...P });
+}
 let remotePerms = { control: true, files: true, clip: true };
 
 // ================= UI helpers =================
@@ -176,55 +195,63 @@ async function boot() {
 // ================= HOST =================
 let pendingHost = null;
 async function onIncomingConn(c) {
-  if (role || pendingHost) { c.on('open', () => { c.send({ t: 'busy' }); setTimeout(() => c.close(), 300); }); return; }
+  if (!isAllowed(c.peer)) { // not on the allow-list: turn away without asking
+    c.on('open', () => { c.send({ t: 'blocked' }); setTimeout(() => c.close(), 300); });
+    logHistory({ dir: 'in', id: fmt(c.peer.replace(PREFIX, '')), how: 'blocked' }); return;
+  }
+  if (role || pendingHost || hostRebooting) { c.on('open', () => { c.send({ t: 'busy' }); setTimeout(() => c.close(), 300); }); return; }
   pendingHost = c;
   c.on('close', () => { if (pendingHost === c) pendingHost = null; });
   c.on('open', async () => {
     const who = fmt(c.peer.replace(PREFIX, ''));
     let asked = false, settled = false;
-    const finish = (ok, how) => {
-      if (settled) return; settled = true; c.off('data', pre); pendingHost = null;
-      if (ok) acceptHost(c, who, how);
+    let vname = '';
+    const finish = (ok, how, perms) => {
+      if (settled) return; settled = true; c.off('data', pre); pendingHost = null; closeRequest();
+      if (ok) acceptHost(c, who, how, perms);
       else { c.send({ t: 'denied' }); setTimeout(() => c.close(), 300); logHistory({ dir: 'in', id: who, how: 'declined' }); }
     };
     const ask = async () => {
       if (asked || settled) return; asked = true;
       chime();
       c.send({ t: 'wait' });
-      const ok = await window.dw.confirm(`${who} wants to view and control this computer.\n\nOnly accept if you know and trust this person.`);
-      if (c.open) finish(ok, 'approved'); else pendingHost = null;
+      const perms = await requestDialog(who, () => vname);
+      if (c.open) finish(!!perms, 'approved', perms); else { pendingHost = null; closeRequest(); }
     };
     const pre = async (m) => {
       if (settled) return;
       if (m.t === 'ask') return ask();
+      if (m.t === 'vinfo') { vname = String(m.name || '').slice(0, 40); refreshRequestName(vname); return; }
       if (m.t === 'auth-reply') {
-        const r = await window.dw.authVerify(c.peer, m.proof);
-        if (r.ok) return finish(true, 'unattended');
+        const r = await window.dw.authVerify(c.peer, m.proof, m.codeProof);
+        if (r.ok) { if (r.via === 'code') rotateCode(); return finish(true, r.via === 'code' ? 'code' : 'unattended'); }
         if (r.locked) { c.send({ t: 'auth-locked', mins: r.locked }); return; }
-        const ch = await window.dw.authChallenge(c.peer); // fresh nonce for the retry
+        const ch = await window.dw.authChallenge(c.peer, usePw); // fresh nonce for the retry
         c.send({ t: 'auth-fail', left: r.left, ...ch });
       }
     };
     c.on('data', pre);
-    const unattended = S.unattended && await window.dw.authHas();
-    if (!unattended) return ask();
-    const ch = await window.dw.authChallenge(c.peer);
+    const usePw = !!(S.unattended && await window.dw.authHas());
+    if (!usePw && !(S.otp && otpCode)) return ask();
+    const ch = await window.dw.authChallenge(c.peer, usePw);
+    if (ch.none) return ask();
     if (ch.locked) c.send({ t: 'auth-locked', mins: ch.locked });
     else c.send({ t: 'auth', ...ch });
   });
 }
 
-async function acceptHost(c, who, how) {
-    role = 'host'; conn = c; hostHow = how;
+async function acceptHost(c, who, how, perms) {
+    role = 'host'; conn = c; hostHow = how; P = perms || defaultPerms();
     if (IS_MAC) {
       const p = await window.dw.macPerms(true);
       if (!p.screen) { toast('Allow Screen Recording for UniDesk in System Settings, then reconnect', 6000); window.dw.openMacPref('screen'); }
       else if (!p.control) toast('Allow Accessibility for UniDesk so the visitor can control this Mac', 6000);
     }
-    if (how === 'unattended') {
+    if (how === 'unattended' || how === 'code') {
       try { new Notification('UniDesk', { body: `${who} connected with unattended access`, silent: false }); } catch {}
     }
     logHistory({ dir: 'in', id: who, how });
+    if (S.hideWall && !IS_MAC) { await window.dw.wallpaperHide().catch(() => {}); await new Promise(r => setTimeout(r, 250)); }
     try {
       screens = await window.dw.screens(false);
       curScreen = Math.max(0, screens.findIndex(s => s.primary));
@@ -232,6 +259,9 @@ async function acceptHost(c, who, how) {
       call = (c.provider || peer).call(c.peer, stream, { sdpTransform: preferCodecSdp }); // same server the visitor came in on (internet or LAN)
       tune(call.peerConnection, 'balanced');
       wireData(c); startClipSync(); sendScreens(); sendPerms(); startIdleWatch();
+      if (S.recIncoming) hostRecStart(who);
+      startSessionTimer();
+      if (!IS_MAC) window.dw.secureStart().catch(() => {}); // stream lock screen / UAC if the service is installed
       window.dw.sysinfo().then(info => send({ t: 'info', ...info }));
       $('hostWho').textContent = who; $('hosting').classList.add('show');
       c.on('close', endAll); call.on('close', endAll);
@@ -297,8 +327,10 @@ async function switchMonitor(i) {
   const track = ns.getVideoTracks()[0];
   const sender = call.peerConnection.getSenders().find(s => s.track?.kind === 'video');
   await sender.replaceTrack(track);
+  const wasRec = hostRec ? hostRec.who : null; if (wasRec) await hostRecStop();
   stream.getVideoTracks().forEach(t => { t.stop(); stream.removeTrack(t); });
   stream.addTrack(track);
+  if (wasRec) hostRecStart(wasRec, true);
   curScreen = i;
   send({ t: 'screen', i });
 }
@@ -324,7 +356,7 @@ async function startConn(id, nearby) {
   if (role !== 'viewer' || viewerTarget !== id) return; // cancelled meanwhile
   viaLan = !!via;
   conn = (via || peer).connect(PREFIX + id, { reliable: true, serialization: 'json' });
-  conn.on('open', () => { wireData(conn); saveRecent(id); });
+  conn.on('open', () => { wireData(conn); saveRecent(id); window.dw.sysinfo().then(i => send({ t: 'vinfo', name: i.host })).catch(() => {}); });
   const myConn = conn;
   conn.on('close', () => conn === myConn && onViewerDrop());
   conn.on('error', () => conn === myConn && onViewerDrop());
@@ -343,7 +375,7 @@ async function onAuth(m) {
   showAuth('');
 }
 function showAuth(err, locked) {
-  overlay('auth', `<span>${fmt(viewerTarget)}</span> is protected`, 'Enter the unattended-access password, or ask the person there to let you in.');
+  overlay('auth', `<span>${fmt(viewerTarget)}</span> is protected`, 'Enter the access password or one-time code, or ask the person there to let you in.');
   $('authBox').classList.add('show'); $('authErr').textContent = err || '';
   $('authGo').disabled = !!locked; $('authPw').disabled = !!locked;
   if (err) { $('authBox').classList.remove('shake'); void $('authBox').offsetWidth; $('authBox').classList.add('shake'); }
@@ -352,9 +384,9 @@ function showAuth(err, locked) {
 async function submitAuth(pw, remember, fromSaved) {
   if (!pw || !authCh?.nonce) return;
   $('authGo').disabled = true; $('authGo').querySelector('span').textContent = 'Checking…';
-  const proof = await window.dw.authProof(pw, authCh.salt, authCh.nonce, authCh.iter);
+  const { proof, codeProof } = await window.dw.authProof(pw, authCh.salt, authCh.nonce, authCh.iter);
   pendingPw = { pw, remember, fromSaved };
-  send({ t: 'auth-reply', proof });
+  send({ t: 'auth-reply', proof, codeProof });
 }
 $('authGo').onclick = () => submitAuth($('authPw').value, $('authRemember').checked, false);
 $('authPw').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') $('authGo').click(); });
@@ -364,18 +396,23 @@ $('authEye').onclick = () => { const p = $('authPw'); p.type = p.type === 'passw
 function failConnect(title, sub) {
   clearTimeout(connectTimer);
   if (role === 'viewer' && !call) { try { conn?.close(); } catch {} conn = null; role = null; }
+  if (restartWait) { restartTick(); return; } // still waiting for a restarting PC: just try again later
   overlay('fail', title, sub);
   setTimeout(() => overlay(null), 2000);
 }
 
 function onIncomingCall(c) {
+  if (c.metadata?.kind === 'voice') return onVoiceCall(c); // voice chat runs as its own call, both directions
   if (role !== 'viewer' || !conn || c.peer !== conn.peer) { c.close(); return; }
   call = c; clearTimeout(connectTimer);
   c.answer(undefined, { sdpTransform: preferCodecSdp });
   c.on('stream', (s) => {
     const v = $('video'); v.srcObject = s; v.muted = false;
-    overlay('ok', reconnectTries ? 'Reconnected' : 'Connected', 'Starting session…');
-    inSession = true; reconnectTries = 0;
+    if (restartWait) restartBack = Date.now(); // 'stream' fires once per track, so remember it briefly
+    const afterRestart = Date.now() - restartBack < 5000;
+    overlay('ok', reconnectTries || afterRestart ? 'Reconnected' : 'Connected', afterRestart ? 'The PC is back after its restart' : 'Starting session…');
+    stopRestartWait();
+    inSession = true; reconnectTries = 0; if (!sessStart) startSessionTimer();
     if (pendingPw?.remember) window.dw.pwRemember(viewerTarget, pendingPw.pw).then(ok => ok && toast('Password saved for this desk', 1800));
     logHistory({ dir: 'out', id: fmt(viewerTarget), how: pendingPw ? 'unattended' : 'approved' }); pendingPw = null;
     $('quality').value = S.quality; send({ t: 'quality', q: S.quality }); $('clipSync').checked = !!S.clip;
@@ -392,10 +429,29 @@ function onIncomingCall(c) {
 // ================= DATA CHANNEL =================
 let lastClip = null;
 function wireData(c) {
-  c.on('data', (m) => {
+  const parts = new Map();
+  c.on('data', (raw) => {
+    lastRx = Date.now();
+    // reassemble messages that send() split into pieces (the data channel drops messages of 16 KB or more)
+    let m = raw;
+    if (raw && raw.t === '_c') {
+      let e = parts.get(raw.id); if (!e) { e = { s: new Array(raw.n), got: 0 }; parts.set(raw.id, e); }
+      if (e.s[raw.i] === undefined) { e.s[raw.i] = raw.s; e.got++; }
+      if (e.got < raw.n) return;
+      parts.delete(raw.id);
+      try { m = JSON.parse(e.s.join('')); } catch { return; }
+    }
     if (role === 'host' && m.t !== 'thumbs') lastActivity = Date.now();
     switch (m.t) {
       case 'bye': byeReceived = true; break;
+      case 'fs': if (role === 'host') onFsRequest(m); break;
+      case 'fs-r': if (role === 'viewer') onFsReply(m); break;
+      case 'paused': if (role === 'viewer') setPausedView(!!m.on); break;
+      case 'ci': if (role === 'host' ? P.clip : $('clipSync').checked) onClipImageChunk(m); break;
+      case 'voice-off': onVoiceOff(); break;
+      case 'req-control': if (role === 'host' && !P.control) askControl(); break;
+      case 'sf': if (role === 'viewer') onSecureChunk(m); break;
+      case 'sf-end': if (role === 'viewer') secureOff(); break;
       case 'draw': if (role === 'host') window.dw.draw(m); break;
       case 'info':
         if (role !== 'viewer') break;
@@ -404,6 +460,11 @@ function wireData(c) {
         $('sessWho').textContent = `${m.host} · ${fmt(viewerTarget)}`;
         nameDeskIfUnnamed(viewerTarget, m.host); break;
       case 'denied': failConnect('Declined', 'Your partner declined the request.'); break;
+      case 'blocked': if (role === 'viewer' && !call) { stopRestartWait(); failConnect('Not allowed', 'That desk only accepts connections from approved addresses.'); } break;
+      case 'ps': if (role === 'host') onPsRequest(m); break;
+      case 'ps-r': if (role === 'viewer') onFsReply(m); break;
+      case 'reboot': if (role === 'host') onRebootRequest(); break;
+      case 'reboot-r': if (role === 'viewer') onRebootReply(m); break;
       case 'busy': failConnect('Busy', 'That desk is already in a session.'); break;
       case 'wait': if (role === 'viewer' && !call) { $('authBox').classList.remove('show'); overlay('wait', `Calling <span>${fmt(viewerTarget)}</span>`, 'Waiting for your partner to accept…'); } break;
       case 'auth': if (role === 'viewer') onAuth(m); break;
@@ -411,7 +472,7 @@ function wireData(c) {
         if (role !== 'viewer') break;
         authCh = m; $('authGo').querySelector('span').textContent = 'Unlock';
         if (pendingPw?.fromSaved) { window.dw.pwForget(viewerTarget); showAuth('Your saved password no longer works.'); }
-        else showAuth(`Wrong password · ${m.left} ${m.left === 1 ? 'try' : 'tries'} left`);
+        else showAuth(`Wrong password or code · ${m.left} ${m.left === 1 ? 'try' : 'tries'} left`);
         pendingPw = null; break;
       case 'auth-locked':
         if (role !== 'viewer') break;
@@ -420,26 +481,56 @@ function wireData(c) {
       case 'screens': remoteScreens = m.list; curScreen = m.cur; renderScreens(); break;
       case 'screen': curScreen = m.i; renderScreens(); setTimeout(() => $('video').classList.remove('switching'), 250); toast(`Now viewing Screen ${m.i + 1}`, 1600); break;
       case 'thumbs': if (role === 'host') sendScreens(); break;
-      case 'clip': if (role === 'host' && !S.allowClip) break; lastClip = m.text; window.dw.clipWrite(m.text); break;
+      case 'clip': if (role === 'host' && !P.clip) break; lastClip = m.text; window.dw.clipWrite(m.text); break;
       case 'chat': addChat(m.text, false); break;
       case 'perms': {
         const was = remotePerms; remotePerms = m;
         if (!m.control && was.control !== false) toast('Partner allows view only', 2600);
         if (m.control && was.control === false) toast('Partner enabled remote control', 2200);
-        $('ctrlBtn').disabled = !m.control; $('ctrlBtn').style.opacity = m.control ? '' : '.4';
+        $('ctrlBtn').disabled = false; $('ctrlBtn').style.opacity = '';
+        $('ctrlBtn').innerHTML = m.control ? '<svg class="ic"><use href="#i-mouse"/></svg><span>Control</span>' : '<svg class="ic"><use href="#i-mouse"/></svg><span>Request control</span>';
+        $('ctrlBtn').classList.toggle('on', !m.control);
         $('fileBtn').disabled = !m.files; $('fileBtn').style.opacity = m.files ? '' : '.4';
+        $('termBtn').style.display = m.terminal ? '' : 'none';
+        $('browseBtn').style.display = m.browse ? '' : 'none'; if (!m.browse) toggleBrowse(false);
+        $('tmBtn').style.display = m.control ? '' : 'none'; if (!m.control) toggleTm(false);
+        $('privBtn').style.display = m.control ? '' : 'none'; if (!m.control) setPrivBtn(false);
+        $('blockBtn').style.display = m.control ? '' : 'none'; if (!m.control) setBlockBtn(false);
+        fbButtons();
+        if (!m.terminal) toggleTerm(false);
+        if (m.terminal && !was.terminal) toast('Partner allowed the remote terminal', 2200);
         break;
       }
       case 'monitor': if (role === 'host') switchMonitor(m.i); break;
       case 'quality': if (role === 'host') tune(call.peerConnection, m.q); break;
-      case 'file-start': if (role === 'host' && !S.allowFiles) break; window.dw.fileStart(m); toast(`Receiving ${m.name}…`); break;
-      case 'file-chunk': if (role === 'host' && !S.allowFiles) break; window.dw.fileChunk(m); break;
-      case 'file-end': if (role === 'host' && !S.allowFiles) break; window.dw.fileEnd(m); break;
-      default: if (role === 'host' && S.allowControl) window.dw.input(m);
+      case 'hb': break;
+      case 'rec-on': if (role === 'viewer') { $('recBadge').classList.add('show'); if (!m.again) toast('Your partner is recording this session', 3200); } break;
+      case 'power': if (role === 'host') onPowerRequest(m); break;
+      case 'power-r': if (role === 'viewer') onPowerReply(m); break;
+      case 'block': if (role === 'host') onBlockRequest(m); break;
+      case 'block-r': if (role === 'viewer') onBlockReply(m); break;
+      case 'privacy': if (role === 'host') onPrivacyRequest(m); break;
+      case 'privacy-r': if (role === 'viewer') onPrivacyReply(m); break;
+      case 'file-start': if (role === 'host' && !P.files) break; if (role !== 'host' || !P.browse) delete m.dir; window.dw.fileStart(m); toast(`Receiving ${m.name}…`); break;
+      case 'file-chunk': if (role === 'host' && !P.files) break; window.dw.fileChunk(m); break;
+      case 'file-end': if (role === 'host' && !P.files) break; window.dw.fileEnd(m); break;
+      case 'term-in': if (role === 'host' && P.terminal) window.dw.termInput(String(m.d || '')); break;
+      case 'term-out': if (role === 'viewer') termWrite(m.d); break;
+      default: if (role === 'host' && P.control && !hostPaused) window.dw.input(m);
     }
   });
 }
-const send = (m) => conn?.open && conn.send(m);
+// The PeerJS data channel silently drops messages of 16 KB or more, so large messages are split
+// into <12 KB pieces here and put back together in wireData().
+const MAX_MSG = 12000; let msgSeq = 0;
+function send(m) {
+  if (!conn?.open) return false;
+  const s = JSON.stringify(m);
+  if (s.length <= MAX_MSG) { conn.send(m); return true; }
+  const id = ++msgSeq, n = Math.ceil(s.length / MAX_MSG);
+  for (let i = 0; i < n; i++) conn.send({ t: '_c', id, i, n, s: s.slice(i * MAX_MSG, (i + 1) * MAX_MSG) });
+  return true;
+}
 const sendInput = (m) => role === 'viewer' && control && send(m);
 
 // ---- screens switcher ----
@@ -470,21 +561,26 @@ $('stage').addEventListener('pointerdown', () => $('screensPanel').classList.con
 let clipTimer;
 function startClipSync() {
   clearInterval(clipTimer);
-  window.dw.clipRead().then(t => (lastClip = t));
+  window.dw.clipState().then(st => { lastClip = st.text; lastImgHash = st.imgHash; });
   clipTimer = setInterval(async () => {
-    if (role === 'host' ? !S.allowClip : (!$('clipSync').checked || remotePerms.clip === false)) return;
-    const t = await window.dw.clipRead();
+    if (role === 'host' ? !P.clip : (!$('clipSync').checked || remotePerms.clip === false)) return;
+    const st = await window.dw.clipState(); const t = st.text;
     if (t && t !== lastClip && t.length < 1_000_000) { lastClip = t; send({ t: 'clip', text: t }); }
-  }, 600);
+    else if (!t && st.imgHash && st.imgHash !== lastImgHash) { lastImgHash = st.imgHash; sendClipImage(); }
+  }, 700);
 }
 
 // ---- files ----
-window.dw.onFileSaved((p) => { toast('Saved: ' + p.split(/[\\/]/).pop(), 4500); window.dw.showFile(p); });
-async function sendFiles(list) {
+window.dw.onFileSaved((p, into) => {
+  if (into) { toast(`Your partner uploaded ${p.split(/[\\/]/).pop()} to ${p.split(/[\\/]/).slice(-2, -1)[0] || 'a folder'}`, 3200); return; }
+  toast('Saved: ' + p.split(/[\\/]/).pop(), 4500); window.dw.showFile(p);
+});
+window.dw.onFileFailed((n) => toast(`Couldn’t save ${n}`, 3000));
+async function sendFiles(list, dir) {
   const bar = $('progressBar'); $('progress').classList.add('show');
   for (const f of list) {
     const id = crypto.randomUUID(), CH = 48 * 1024;
-    send({ t: 'file-start', id, name: f.name, size: f.size });
+    send({ t: 'file-start', id, name: f.name, size: f.size, ...(dir ? { dir } : {}) });
     const buf = new Uint8Array(await f.arrayBuffer());
     for (let o = 0; o < buf.length; o += CH) {
       let bin = ''; const part = buf.subarray(o, o + CH);
@@ -545,7 +641,17 @@ function endAll(opts = {}) {
   const wasHost = role === 'host', how = hostHow;
   send({ t: 'bye' });
   clearInterval(idleTimer); hostHow = null;
-  if (wasHost) window.dw.drawClose();
+  if (wasHost) { window.dw.drawClose(); window.dw.secureStop(); window.dw.termStop(); window.dw.wallpaperRestore(); hostRecStop(); }
+  $('recBadge').classList.remove('show');
+  if (wasHost || hostBlock) { hostBlock = false; clearInterval(blockWatch); window.dw.blockInput(false); }
+  setBlockBtn(false); $('blockBtn').style.display = 'none'; clearInterval(hbTimer);
+  if (wasHost || hostPrivacy) { hostPrivacy = false; window.dw.privacy(false); }
+  setPrivBtn(false); $('privBtn').style.display = 'none'; fbAskClose();
+  hostPaused = false; $('pauseBtn').classList.remove('on'); $('pauseLabel').textContent = 'Pause'; setPausedView(false); toggleBrowse(false); $('browseBtn').style.display = 'none'; toggleTm(false);
+  stopVoice(true); ctrlAsk = false; $('ctrlReq').classList.remove('show');
+  if (!opts.silent) { stopSessionTimer(); sessStart = 0; }
+  toggleTerm(false); $('termOut').textContent = ''; $('termBtn').style.display = 'none';
+  secureOff();
   setDrawMode(false); drawLayer.apply({ k: 'clear' });
   if (!opts.silent) { inSession = false; }
   byeReceived = false;
@@ -573,8 +679,9 @@ function endAll(opts = {}) {
 
 // ================= VIEWER INPUT =================
 function norm(e) {
-  const v = $('video'), r = v.getBoundingClientRect();
-  const vw = v.videoWidth || r.width, vh = v.videoHeight || r.height, sc = Math.min(r.width / vw, r.height / vh);
+  const v = $('video'), r = v.getBoundingClientRect(), img = $('secureImg');
+  // while a secure screen is shown, map against the secure image (primary monitor) instead of the video
+  const vw = (secureOn && img.naturalWidth) || v.videoWidth || r.width, vh = (secureOn && img.naturalHeight) || v.videoHeight || r.height, sc = Math.min(r.width / vw, r.height / vh);
   const w = vw * sc, h = vh * sc, ox = r.left + (r.width - w) / 2, oy = r.top + (r.height - h) / 2;
   return { x: Math.min(1, Math.max(0, (e.clientX - ox) / w)), y: Math.min(1, Math.max(0, (e.clientY - oy) / h)) };
 }
@@ -623,11 +730,12 @@ $('remoteId').addEventListener('keydown', (e) => { if (e.key === 'Enter') connec
 $('connectBtn').onclick = () => connect();
 const copyId = () => { if (!myId) return; navigator.clipboard.writeText(myId); toast('Address copied to clipboard', 1800); };
 $('myId').onclick = copyId; $('copyBtn').onclick = copyId;
-$('cancelBtn').onclick = () => { clearTimeout(connectTimer); try { conn?.close(); } catch {} conn = null; role = null; overlay(null); };
+$('cancelBtn').onclick = () => { stopRestartWait(); clearTimeout(connectTimer); try { conn?.close(); } catch {} conn = null; role = null; overlay(null); };
 $('endBtn').onclick = () => endAll(); $('stopHost').onclick = () => endAll();
 $('fullBtn').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
 document.addEventListener('fullscreenchange', () => { document.body.classList.toggle('fs', !!document.fullscreenElement); revealToolbar(); });
 $('ctrlBtn').onclick = () => {
+  if (remotePerms.control === false) { send({ t: 'req-control' }); toast('Asked your partner for control', 2000); return; }
   control = !control;
   $('ctrlBtn').innerHTML = control ? '<svg class="ic"><use href="#i-mouse"/></svg><span>Control</span>' : '<svg class="ic"><use href="#i-eye"/></svg><span>View only</span>';
   $('ctrlBtn').classList.toggle('on', !control); toast(control ? 'Remote control enabled' : 'View-only mode', 1600);
@@ -637,11 +745,21 @@ $('filePick').onchange = (e) => { if (e.target.files.length) sendFiles(e.target.
 $('clipSync').onchange = (e) => toast(e.target.checked ? 'Clipboard sync on' : 'Clipboard sync off', 1500);
 $('combo').onchange = async (e) => {
   const v = e.target.value; e.target.value = '';
-  if (v === 'typeclip') {
+  if (v === 'cad') {
+    if (!control || remotePerms.control === false) toast('Remote control is off', 1600);
+    else { sendInput({ t: 'cad' }); toast('Sent Ctrl+Alt+Del (needs the UniDesk service on the remote PC)', 2600); }
+  } else if (v === 'typeclip') {
     const text = await window.dw.clipRead();
     if (!text) toast('Your clipboard is empty', 1600);
     else if (!control || remotePerms.control === false) toast('Remote control is off', 1600);
     else { sendInput({ t: 'type', text: text.slice(0, 5000) }); toast(`Typing ${Math.min(text.length, 5000)} characters…`, 1600); }
+  } else if (v === 'sleep' || v === 'signout' || v === 'shutdown') {
+    const what = { sleep: 'Put {pc} to sleep?', signout: 'Sign out the user on {pc}?\n\nUnsaved work in their open apps may be lost.', shutdown: 'Shut down {pc}?\n\nYou won’t be able to reconnect until someone turns it on (or you wake it with Wake-on-LAN).' }[v].replace('{pc}', remoteInfo?.host || 'the remote PC');
+    if (!control || remotePerms.control === false) toast('Remote control is off', 1600);
+    else if (confirm(what)) send({ t: 'power', what: v });
+  } else if (v === 'reboot') {
+    if (!control || remotePerms.control === false) toast('Remote control is off', 1600);
+    else if (confirm(`Restart ${remoteInfo?.host || 'the remote PC'}?\n\nUniDesk will wait for it to come back and reconnect automatically (up to 5 minutes).`)) send({ t: 'reboot' });
   } else {
     const map = { tm: ['ControlLeft', 'ShiftLeft', 'Escape'], win: ['MetaLeft'], alttab: ['AltLeft', 'Tab'], lock: ['MetaLeft', 'KeyL'], desk: ['MetaLeft', 'KeyD'], run: ['MetaLeft', 'KeyR'], explorer: ['MetaLeft', 'KeyE'], settings: ['MetaLeft', 'KeyI'] };
     if (map[v]) sendInput({ t: 'combo', keys: map[v] });
@@ -672,6 +790,7 @@ function loadRecents() {
     el.innerHTML = `<button class="desk-main" title="Connect"><span class="desk-av">${(x.name || '#')[0].toUpperCase()}</span>
         <span class="desk-txt"><b></b><small class="mono">${fmt(x.id)}</small></span></button>
       <div class="desk-acts">
+        ${x.mac && !nearbyDesk(x.id) ? '<button class="wake" title="Wake up this PC (Wake-on-LAN)">⏻</button>' : ''}
         <button class="mini star" title="${x.fav ? 'Unpin' : 'Pin to top'}">${x.fav ? '★' : '☆'}</button>
         <button class="mini" title="Rename">✎</button>
         <button class="mini" title="Remove">✕</button>
@@ -679,6 +798,7 @@ function loadRecents() {
     el.querySelector('b').textContent = x.name || 'Unnamed desk';
     el.querySelector('.desk-main').onclick = () => connect(x.id);
     const [star, ren, del] = el.querySelectorAll('.mini');
+    const wk = el.querySelector('.wake'); if (wk) wk.onclick = (e) => { e.stopPropagation(); wakeDesk(x); };
     star.onclick = () => { const all = readDesks(); const t = all.find(y => y.id === x.id); t.fav = !t.fav; writeDesks(all); };
     ren.onclick = () => openNameDialog(x.id, x.name);
     del.onclick = () => { writeDesks(readDesks().filter(y => y.id !== x.id)); window.dw.pwForget(x.id); toast('Desk removed', 1400); };
@@ -729,6 +849,7 @@ function startStats() {
       }
     });
     const codec = (byId.get(codecId)?.mimeType || '').replace('video/', '');
+    updateSignal(rtt, fps);
     $('stats').textContent = `${codec} · ${w}×${h} · ${Math.round(fps)} fps · ${(kbps / 1000).toFixed(1)} Mbps · ${Math.round(rtt)} ms · ${viaLan ? 'LAN' : path}`;
   }, 1000);
 }
@@ -738,7 +859,7 @@ let currentLog = null;
 function readHistory() { try { return JSON.parse(localStorage.getItem('ud-history') || '[]'); } catch { return []; } }
 function logHistory(entry) {
   const h = readHistory(); const e = { ...entry, start: Date.now(), end: null };
-  if (entry.how !== 'declined') currentLog = e.start; else e.end = e.start;
+  if (entry.how !== 'declined' && entry.how !== 'blocked') currentLog = e.start; else e.end = e.start;
   h.unshift(e); try { localStorage.setItem('ud-history', JSON.stringify(h.slice(0, 50))); } catch {}
   renderHistory();
 }
@@ -752,12 +873,12 @@ function renderHistory() {
   const box = $('historyList'); if (!box) return;
   const h = readHistory().slice(0, 20); box.innerHTML = '';
   if (!h.length) { box.innerHTML = '<div class="row"><div class="txt"><span>No sessions yet.</span></div></div>'; return; }
-  const labels = { approved: 'Approved', unattended: 'Unattended', declined: 'Declined' };
+  const labels = { approved: 'Approved', unattended: 'Unattended', code: 'One-time code', declined: 'Declined', blocked: 'Blocked' };
   h.forEach(e => {
     const r = document.createElement('div'); r.className = 'row hist';
     const when = new Date(e.start).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     r.innerHTML = `<span class="hdir ${e.dir}">${e.dir === 'in' ? '↘' : '↗'}</span>
-      <div class="txt"><b class="mono">${e.id}</b><span>${e.dir === 'in' ? 'Connected to you' : 'You connected'} · ${when}${e.end && e.how !== 'declined' ? ' · ' + dur(e.end - e.start) : ''}</span></div>
+      <div class="txt"><b class="mono">${e.id}</b><span>${e.dir === 'in' ? 'Connected to you' : 'You connected'} · ${when}${e.end && e.how !== 'declined' && e.how !== 'blocked' ?' · ' + dur(e.end - e.start) : ''}</span></div>
       <span class="htag ${e.how}">${labels[e.how] || e.how}</span>`;
     box.appendChild(r);
   });
@@ -998,15 +1119,41 @@ function renderNearby() {
 async function refreshAdminUi() {
   const s = await window.dw.adminStatus().catch(() => null);
   if (!s?.supported) { $('adminGroup').style.display = 'none'; return; }
-  $('adminState').textContent = s.admin ? 'Yes: visitors can control admin apps and Task Manager' : 'No: admin windows and UAC prompts can’t be controlled';
+  $('adminState').textContent = s.admin ? 'Yes: visitors can control admin apps and Task Manager' : 'No: start UniDesk as administrator for full control';
   $('adminBtn').style.display = s.admin ? 'none' : '';
-  $('uacState').textContent = s.uacOnNormalDesktop ? 'On: UAC prompts appear where visitors can see and click them' : 'Off: UAC prompts appear on the secure desktop (visitors see a frozen screen)';
-  $('uacBtn').textContent = s.uacOnNormalDesktop ? 'Turn off' : 'Turn on';
-  $('uacBtn').onclick = async () => {
-    const r = await window.dw.uacNormalDesktop(!s.uacOnNormalDesktop);
-    toast(r.ok ? 'Updated' : 'Cancelled: Windows needs your approval for this', 2200); refreshAdminUi();
-  };
+  const label = { running: 'Running: lock screen, UAC prompts and Ctrl+Alt+Del work in sessions', stopped: 'Installed but stopped', missing: 'Not installed yet' }[s.service] || s.service;
+  $('svcState').textContent = s.helper ? label : 'Available in the installed app';
+  $('svcBtn').style.display = s.admin && s.helper && s.service !== 'running' ? '' : 'none';
 }
+$('svcBtn').onclick = async () => {
+  $('svcBtn').disabled = true; const r = await window.dw.serviceInstall(); $('svcBtn').disabled = false;
+  toast(r.ok ? 'Secure Desktop service is running' : 'Could not install the service: ' + (r.reason || 'unknown'), 2600); refreshAdminUi();
+};
+
+// ================= SECURE DESKTOP (lock screen / UAC / Ctrl+Alt+Del) =================
+// Host: frames come from the SYSTEM agent via main; split into chunks small enough for the data channel.
+const SF_CHUNK = 48 * 1024; let sfSeq = 0;
+window.dw.onSecureFrame((f) => {
+  if (role !== 'host') return;
+  if (!f) return send({ t: 'sf-end' });
+  const id = ++sfSeq, n = Math.ceil(f.jpeg.length / SF_CHUNK);
+  for (let i = 0; i < n; i++) send({ t: 'sf', id, i, n, k: f.desk, d: f.jpeg.slice(i * SF_CHUNK, (i + 1) * SF_CHUNK) });
+});
+// Viewer: reassemble and show over the video
+let secureOn = false; const sfParts = new Map();
+function onSecureChunk(m) {
+  let e = sfParts.get(m.id); if (!e) { e = { parts: new Array(m.n), got: 0 }; sfParts.set(m.id, e); }
+  if (!e.parts[m.i]) { e.parts[m.i] = m.d; e.got++; }
+  if (e.got < m.n) return;
+  sfParts.delete(m.id); for (const k of sfParts.keys()) if (k < m.id) sfParts.delete(k);
+  $('secureImg').src = 'data:image/jpeg;base64,' + e.parts.join('');
+  if (!secureOn) {
+    secureOn = true; $('stage').classList.add('secure');
+    const what = /winlogon/i.test(m.k) ? 'the lock screen or a security prompt' : 'a secure screen';
+    $('secureBanner').textContent = `The remote PC is showing ${what}. You can still control it.`;
+  }
+}
+function secureOff() { secureOn = false; sfParts.clear(); $('stage').classList.remove('secure'); $('secureImg').removeAttribute('src'); }
 $('adminBtn').onclick = () => { if (role) return toast('End the current session first', 2000); window.dw.adminRelaunch(); };
 refreshAdminUi();
 
@@ -1066,3 +1213,509 @@ document.querySelector('[data-set="lan"]').addEventListener('change', () => {
   if (!role) { toast('Restarting the network…', 1400); setTimeout(() => location.reload(), 800); }
   else toast('LAN mode changes apply after this session', 2200);
 });
+// ================= REQUEST CARD (host) =================
+let reqResolve = null, reqTimer = null;
+function requestDialog(who, getName) {
+  return new Promise((resolve) => {
+    reqResolve = resolve;
+    window.dw.showWindow();
+    try { if (document.hidden) new Notification('UniDesk', { body: `${who} wants to connect to this computer` }); } catch {}
+    $('reqWho').textContent = who; refreshRequestName(getName());
+    $('reqControl').checked = !!S.allowControl; $('reqView').checked = !S.allowControl;
+    $('reqFiles').checked = !!S.allowFiles; $('reqClip').checked = !!S.allowClip; $('reqTerm').checked = false; $('reqBrowse').checked = false;
+    $('reqCard').classList.add('show');
+    let left = 30; $('reqCount').textContent = left;
+    clearInterval(reqTimer);
+    reqTimer = setInterval(() => { left--; $('reqCount').textContent = left; $('reqRing').style.strokeDashoffset = String(113 * (1 - left / 30)); if (left <= 0) answerRequest(null); }, 1000);
+    $('reqRing').style.strokeDashoffset = '0';
+    setTimeout(() => $('reqAccept').focus(), 100);
+  });
+}
+function refreshRequestName(name) { $('reqName').textContent = name ? `from ${name}` : ''; }
+function answerRequest(perms) { const r = reqResolve; reqResolve = null; closeRequest(); if (r) r(perms); }
+function closeRequest() { clearInterval(reqTimer); $('reqCard').classList.remove('show'); }
+$('reqAccept').onclick = () => answerRequest({ control: $('reqControl').checked, files: $('reqFiles').checked, clip: $('reqClip').checked, terminal: $('reqTerm').checked, browse: $('reqBrowse').checked });
+$('reqDecline').onclick = () => answerRequest(null);
+$('reqTerm').addEventListener('change', (e) => { if (e.target.checked && !$('reqControl').checked) { $('reqControl').checked = true; } });
+$('reqView').addEventListener('change', () => { if ($('reqView').checked) $('reqTerm').checked = false; });
+
+// ================= REMOTE TERMINAL =================
+// Host: a shell runs as this user; output streams to the viewer. Viewer: simple console panel.
+window.dw.onTermOut((d) => { if (role === 'host' && P.terminal) send({ t: 'term-out', d }); });
+function termWrite(d) {
+  const out = $('termOut'); const atBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 8;
+  out.textContent += d; if (out.textContent.length > 200000) out.textContent = out.textContent.slice(-150000);
+  if (atBottom) out.scrollTop = out.scrollHeight;
+}
+function toggleTerm(force) {
+  const open = $('term').classList.toggle('open', force);
+  $('termBtn').classList.toggle('on', open);
+  if (open) setTimeout(() => $('termIn').focus(), 150); else if (role === 'viewer') $('stage').focus();
+}
+const termHist = []; let termHi = 0;
+$('termBtn').onclick = () => toggleTerm();
+$('termClose').onclick = () => toggleTerm(false);
+$('termClear').onclick = () => { $('termOut').textContent = ''; };
+$('termIn').addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') { const v = $('termIn').value; termWrite('> ' + v + '\n'); send({ t: 'term-in', d: v + '\n' }); if (v) termHist.push(v); termHi = termHist.length; $('termIn').value = ''; }
+  else if (e.key === 'ArrowUp') { if (termHi > 0) $('termIn').value = termHist[--termHi]; e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { termHi = Math.min(termHist.length, termHi + 1); $('termIn').value = termHist[termHi] || ''; e.preventDefault(); }
+  else if (e.key === 'Escape') toggleTerm(false);
+});
+
+// ================= SYSTEM KEYS IN FULLSCREEN =================
+document.addEventListener('fullscreenchange', async () => {
+  if (document.fullscreenElement && role === 'viewer' && navigator.keyboard?.lock) {
+    try { await navigator.keyboard.lock(); toast('System keys (Alt+Tab, Windows key…) now go to the remote PC · hold Esc to exit fullscreen', 3200); } catch {}
+  } else if (!document.fullscreenElement) { try { navigator.keyboard?.unlock(); } catch {} }
+});
+
+// ================= WAKE-ON-LAN =================
+window.dw.onLanPeers((list) => {
+  // remember each nearby desk's network card so it can be woken later
+  const all = readDesks(); let changed = false;
+  for (const d of list) { const x = all.find(y => y.id === d.id); if (x && d.mac && x.mac !== d.mac) { x.mac = d.mac; changed = true; } }
+  if (changed) writeDesks(all);
+});
+async function wakeDesk(x) {
+  const r = await window.dw.wol(x.mac);
+  toast(r ? `Wake signal sent to ${x.name || fmt(x.id)}. It may take a minute to come online` : 'Could not send the wake signal', 3000);
+}
+// ================= VOICE CHAT =================
+let micStream = null, voiceCall = null;
+function voiceUi() {
+  const on = !!micStream;
+  for (const id of ['micBtn', 'hostMic']) { const b = $(id); if (b) { b.classList.toggle('on', on); b.title = on ? 'Mute microphone' : 'Talk (microphone)'; } }
+  $('hostMicLabel').textContent = on ? 'Mute' : 'Talk';
+}
+async function startVoice() {
+  if (!conn?.open) return;
+  try { micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch { toast('Microphone not available or blocked', 2400); return; }
+  if (voiceCall) { try { voiceCall.close(); } catch {} voiceCall = null; }
+  voiceCall = (conn.provider || peer).call(conn.peer, micStream, { metadata: { kind: 'voice' } });
+  wireVoice(voiceCall); voiceUi(); toast('Microphone on: your partner can hear you', 1800);
+}
+function stopVoice(silent) {
+  micStream?.getTracks().forEach(t => t.stop()); micStream = null;
+  if (voiceCall) { try { voiceCall.close(); } catch {} voiceCall = null; }
+  $('voiceAudio').srcObject = null;
+  if (!silent) send({ t: 'voice-off' });
+  voiceUi();
+}
+function wireVoice(c) {
+  c.on('stream', (s) => { $('voiceAudio').srcObject = s; $('voiceAudio').play().catch(() => {}); });
+  c.on('close', () => { if (voiceCall === c) { voiceCall = null; $('voiceAudio').srcObject = null; } });
+}
+function onVoiceCall(c) {
+  if (!role || !conn || c.peer !== conn.peer) { c.close(); return; }
+  if (voiceCall && voiceCall !== c) { try { voiceCall.close(); } catch {} }
+  voiceCall = c; c.answer(micStream || undefined); wireVoice(c);
+  if (!micStream) toast('Your partner turned on their microphone · press Talk to answer', 2600);
+}
+function onVoiceOff() {
+  $('voiceAudio').srcObject = null;
+  if (micStream) { const s = micStream; micStream = null; s.getTracks().forEach(t => t.stop()); startVoice(); } // keep my side talking
+}
+$('micBtn').onclick = () => micStream ? stopVoice() : startVoice();
+$('hostMic').onclick = () => micStream ? stopVoice() : startVoice();
+
+// ================= IMAGE CLIPBOARD =================
+let lastImgHash = null; const ciParts = new Map();
+async function sendClipImage() {
+  const b64 = await window.dw.clipImage(); if (!b64 || b64.length > 12_000_000) return;
+  const id = Date.now(), CH = 48 * 1024, n = Math.ceil(b64.length / CH);
+  for (let i = 0; i < n; i++) send({ t: 'ci', id, i, n, d: b64.slice(i * CH, (i + 1) * CH) });
+}
+async function onClipImageChunk(m) {
+  let e = ciParts.get(m.id); if (!e) { e = { parts: new Array(m.n), got: 0 }; ciParts.set(m.id, e); }
+  if (!e.parts[m.i]) { e.parts[m.i] = m.d; e.got++; }
+  if (e.got < m.n) return;
+  ciParts.delete(m.id);
+  lastImgHash = await window.dw.clipWriteImage(e.parts.join('')); lastClip = '';
+  toast('Image copied from your partner', 1600);
+}
+
+// ================= SIGNAL + TIMER =================
+function updateSignal(rtt, fps) {
+  const q = rtt && rtt < 90 && fps >= 20 ? 3 : rtt < 220 && fps >= 10 ? 2 : 1;
+  $('signal').dataset.q = q; $('signal').title = ['', 'Weak connection', 'OK connection', 'Excellent connection'][q] + ` · ${Math.round(rtt)} ms`;
+}
+let sessStart = 0, sessTick = null;
+function startSessionTimer() {
+  sessStart = Date.now(); clearInterval(sessTick);
+  const fmtT = (ms) => { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600); return (h ? h + ':' : '') + String(Math.floor(s / 60) % 60).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+  sessTick = setInterval(() => { const v = fmtT(Date.now() - sessStart); $('sessTime').textContent = v; $('hostTime').textContent = v; }, 1000);
+}
+function stopSessionTimer() { clearInterval(sessTick); $('sessTime').textContent = ''; $('hostTime').textContent = ''; }
+
+// ================= REQUEST CONTROL =================
+let ctrlAsk = false;
+function askControl() {
+  if (ctrlAsk) return; ctrlAsk = true; chime(); window.dw.showWindow();
+  $('ctrlReq').classList.add('show');
+}
+function answerControl(ok) {
+  ctrlAsk = false; $('ctrlReq').classList.remove('show');
+  if (ok && role === 'host') { P = { ...P, control: true }; sendPerms(); toast('You gave your partner control', 1800); }
+  else send({ t: 'chat', text: 'Control request declined.' });
+}
+$('ctrlAllow').onclick = () => answerControl(true);
+$('ctrlDeny').onclick = () => answerControl(false);
+// ================= ONE-TIME ACCESS CODE =================
+let otpCode = null;
+async function rotateCode() {
+  if (!S.otp) { otpCode = null; await window.dw.otpClear(); $('otpRow').style.display = 'none'; return; }
+  otpCode = await window.dw.otpNew();
+  $('otpRow').style.display = ''; $('otpCode').textContent = otpCode;
+  $('otpCode').classList.remove('flip'); void $('otpCode').offsetWidth; $('otpCode').classList.add('flip');
+}
+$('otpRefresh').onclick = () => { rotateCode(); toast('New one-time code', 1400); };
+$('otpCode').onclick = () => { if (otpCode) { navigator.clipboard.writeText(otpCode); toast('Code copied', 1400); } };
+document.querySelector('[data-set="otp"]').addEventListener('change', () => rotateCode());
+rotateCode();
+
+// ================= PAUSE SHARING (host) =================
+let hostPaused = false;
+$('pauseBtn').onclick = () => {
+  if (role !== 'host' || !call) return;
+  hostPaused = !hostPaused;
+  call.peerConnection.getSenders().forEach(s => { if (s.track?.kind === 'video') s.track.enabled = !hostPaused; });
+  window.dw.releaseAll(); if (hostPaused && hostBlock) unblockHost();
+  send({ t: 'paused', on: hostPaused });
+  $('pauseBtn').classList.toggle('on', hostPaused); $('pauseLabel').textContent = hostPaused ? 'Resume' : 'Pause';
+  toast(hostPaused ? 'Sharing paused: your partner sees a paused screen and can’t control' : 'Sharing resumed', 2200);
+};
+function setPausedView(on) { $('stage').classList.toggle('paused', on); }
+
+// ================= REMOTE FILE BROWSER =================
+// Viewer asks, host answers from its disk (only when allowed); downloads reuse the file-transfer channel.
+let fsReq = 0; const fsWait = new Map(); let fsCwd = null;
+function fsAsk(op, data) { return new Promise((res) => { const rid = ++fsReq; fsWait.set(rid, res); send({ t: 'fs', op, rid, ...data }); setTimeout(() => { if (fsWait.has(rid)) { fsWait.delete(rid); res({ error: 'No answer from the remote PC' }); } }, 15000); }); }
+function onFsReply(m) { const f = fsWait.get(m.rid); if (f) { fsWait.delete(m.rid); f(m); } }
+async function onFsRequest(m) {
+  const reply = (d) => send({ t: 'fs-r', rid: m.rid, ...d });
+  if (!P.browse) return reply({ error: 'Browsing is not allowed' });
+  if (m.op === 'roots') return reply({ roots: await window.dw.fsRoots() });
+  if (m.op === 'list') return reply(await window.dw.fsList(m.path));
+  if (m.op === 'mkdir' || m.op === 'rename' || m.op === 'trash') {
+    if (!P.files) return reply({ error: 'Your partner hasn’t allowed file changes' });
+    const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || '';
+    const r = m.op === 'mkdir' ? await window.dw.fsMkdir(m.path, m.name) : m.op === 'rename' ? await window.dw.fsRename(m.path, m.name) : await window.dw.fsTrash(m.path);
+    if (r.ok) toast(m.op === 'mkdir' ? `Your partner created the folder ${base(r.path)}` : m.op === 'rename' ? `Your partner renamed ${base(m.path)} to ${base(r.path)}` : `Your partner moved ${base(m.path)} to the ${/Mac/.test(navigator.userAgent) ? 'Trash' : 'Recycle Bin'}`, 3000);
+    return reply(r);
+  }
+  if (m.op === 'get') {
+    const st = await window.dw.fsStat(m.path); if (!st) return reply({ error: 'File not found' });
+    if (st.size > 2 * 1024 ** 3) return reply({ error: 'Files over 2 GB are not supported' });
+    reply({ ok: true, size: st.size });
+    const id = crypto.randomUUID(); send({ t: 'file-start', id, name: st.name, size: st.size });
+    for (let off = 0; off < st.size || off === 0; ) {
+      const r = await window.dw.fsRead(m.path, off, 48 * 1024); if (!r || !r.n) break;
+      send({ t: 'file-chunk', id, b64: r.d }); off += r.n;
+      const dc = conn?.dataChannel; while (dc && dc.bufferedAmount > 4 * 1024 * 1024) await new Promise(r => setTimeout(r, 20));
+      if (!conn?.open || off >= st.size) break;
+    }
+    send({ t: 'file-end', id });
+  }
+}
+const fmtSize = (n) => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(0) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
+async function browseTo(dir) {
+  $('fbList').innerHTML = '<div class="fb-msg">Loading…</div>';
+  const r = dir ? await fsAsk('list', { path: dir }) : null;
+  if (!dir || r?.error) {
+    const roots = await fsAsk('roots', {});
+    if (r?.error) toast(r.error, 2200);
+    fsCwd = null; $('fbPath').textContent = 'This PC'; $('fbUp').disabled = true; fbButtons(); fbAskClose();
+    $('fbList').innerHTML = '';
+    (roots.roots || []).forEach(x => addFbRow({ name: x.name, dir: true, path: x.path }, true));
+    if (roots.error) $('fbList').innerHTML = `<div class="fb-msg">${roots.error}</div>`;
+    return;
+  }
+  fsCwd = r; $('fbPath').textContent = r.path; $('fbUp').disabled = false; fbButtons(); fbAskClose();
+  $('fbList').innerHTML = r.entries.length ? '' : '<div class="fb-msg">This folder is empty</div>';
+  const sep = r.path.includes('\\') ? '\\' : '/';
+  r.entries.forEach(e => addFbRow({ ...e, path: r.path.replace(/[\\/]$/, '') + sep + e.name }));
+}
+function addFbRow(e, isRoot) {
+  const row = document.createElement('button'); row.className = 'fb-row' + (e.dir ? ' dir' : '');
+  const acts = isRoot ? '' : '<span class="fb-act" data-a="ren" title="Rename"><svg class="ic"><use href="#i-pen"/></svg></span><span class="fb-act del" data-a="del" title="Move to ${binName()}"><svg class="ic"><use href="#i-trash"/></svg></span>';
+  row.innerHTML = `<span class="fb-ic">${e.dir ? (isRoot ? '💽' : '📁') : '📄'}</span><span class="fb-name"></span><span class="fb-meta">${e.dir ? '' : fmtSize(e.size)}</span>${e.dir ? '' : '<span class="fb-dl">Download</span>'}${acts}`;
+  row.querySelector('.fb-name').textContent = e.name;
+  row.onclick = async (ev) => {
+    const a = ev.target.closest('.fb-act')?.dataset.a;
+    if (a) {
+      ev.stopPropagation();
+      if (remotePerms.files === false) return toast('Your partner hasn’t allowed file changes', 2200);
+      if (a === 'ren') return fbAskOpen('rename', e);
+      if (!confirm(`Move “${e.name}” to the ${binName()} on the remote PC?\n\nIt can be restored from there.`)) return;
+      row.classList.add('busy');
+      const r = await fsAsk('trash', { path: e.path });
+      if (r.error) { row.classList.remove('busy'); return toast(r.error, 2400); }
+      toast(`Moved ${e.name} to the ${binName()}`, 2000); return browseTo(fsCwd?.path || null);
+    }
+    if (e.dir) return browseTo(e.path);
+    const r = await fsAsk('get', { path: e.path });
+    toast(r.error ? r.error : `Downloading ${e.name} (${fmtSize(r.size)}) to Downloads\\UniDesk…`, 2600);
+  };
+  $('fbList').appendChild(row);
+}
+function toggleBrowse(force) {
+  const open = $('fb').classList.toggle('open', force);
+  $('browseBtn').classList.toggle('on', open);
+  if (open && !$('fbList').children.length) browseTo(null);
+}
+$('browseBtn').onclick = () => toggleBrowse();
+$('fbClose').onclick = () => toggleBrowse(false);
+$('fbUp').onclick = () => browseTo(fsCwd?.parent || null);
+$('fbHome').onclick = () => browseTo(null);
+
+// ================= REMOTE TASK MANAGER =================
+// Viewer asks for the host's process list (needs the control permission) and can end a process.
+function psAsk(op, data) { return new Promise((res) => { const rid = ++fsReq; fsWait.set(rid, res); send({ t: 'ps', op, rid, ...data }); setTimeout(() => { if (fsWait.has(rid)) { fsWait.delete(rid); res({ error: 'No answer from the remote PC' }); } }, 15000); }); }
+async function onPsRequest(m) {
+  const reply = (d) => send({ t: 'ps-r', rid: m.rid, ...d });
+  if (!P.control || hostPaused) return reply({ error: 'Your partner hasn’t allowed control' });
+  if (m.op === 'list') {
+    const r = await window.dw.psList();
+    if (r.list) r.list = r.list.map(p => ({ ...p, cpuPct: Math.round(p.cpuPct * 10) / 10, title: (p.title || '').slice(0, 80) }));
+    return reply(r);
+  }
+  if (m.op === 'kill') {
+    const r = await window.dw.psKill(m.pid);
+    if (r.ok) toast(`Your partner ended ${String(m.name || 'a process').slice(0, 40)}`, 2600);
+    return reply(r);
+  }
+}
+let tmData = null, tmSort = 'mem', tmTimer = null, tmBusy = false;
+async function refreshTm() {
+  if (tmBusy) return; tmBusy = true;
+  const r = await psAsk('list', {}); tmBusy = false;
+  if (!$('tm').classList.contains('open')) return;
+  if (r.error) { $('tmList').innerHTML = `<div class="fb-msg"></div>`; $('tmList').firstChild.textContent = r.error; return; }
+  tmData = r; renderTm();
+}
+function renderTm() {
+  if (!tmData) return;
+  const q = $('tmSearch').value.trim().toLowerCase();
+  const list = tmData.list.filter(p => !q || p.name.toLowerCase().includes(q) || String(p.pid) === q || p.title.toLowerCase().includes(q));
+  const by = { name: (a, b) => a.name.localeCompare(b.name), pid: (a, b) => a.pid - b.pid, cpu: (a, b) => b.cpuPct - a.cpuPct || b.mem - a.mem, mem: (a, b) => b.mem - a.mem }[tmSort];
+  list.sort(by);
+  const cpu = tmData.list.reduce((s, p) => s + (p.cpuPct || 0), 0), used = tmData.mem.total - tmData.mem.free;
+  $('tmCpu').textContent = Math.min(100, cpu).toFixed(0) + '%';
+  $('tmMem').textContent = `${fmtSize(used)} / ${fmtSize(tmData.mem.total)}`;
+  $('tmMemBar').style.width = (used / tmData.mem.total * 100).toFixed(1) + '%';
+  $('tmCount').textContent = tmData.list.length;
+  const box = $('tmList'), first = !box.querySelector('.tm-row'); box.innerHTML = '';
+  if (!list.length) { box.innerHTML = '<div class="fb-msg">No matching processes</div>'; return; }
+  list.slice(0, 300).forEach((p, i) => {
+    const row = document.createElement('div'); row.className = 'tm-row' + (p.self ? ' self' : ''); row.dataset.pid = p.pid;
+    if (first) row.style.animationDelay = Math.min(i, 20) * 15 + 'ms'; else row.style.animation = 'none';
+    row.innerHTML = `<div class="n"><span></span><small></small></div><span class="v">${p.pid}</span><span class="v${p.cpuPct >= 10 ? ' hot' : ''}">${p.cpuPct.toFixed(1)}%</span><span class="v">${fmtSize(p.mem)}</span><button class="k">End</button>`;
+    row.querySelector('.n span').textContent = p.name;
+    const sm = row.querySelector('.n small'); if (p.title) sm.textContent = p.title; else sm.remove();
+    row.querySelector('.k').onclick = async () => {
+      if (!confirm(`End ${p.name} (PID ${p.pid}) on the remote PC?\n\nUnsaved work in it will be lost.`)) return;
+      row.classList.add('gone');
+      const r = await psAsk('kill', { pid: p.pid, name: p.name });
+      if (r.error) { row.classList.remove('gone'); toast(r.error, 2600); } else { toast(`Ended ${p.name}`, 1800); setTimeout(refreshTm, 600); }
+    };
+    box.appendChild(row);
+  });
+}
+function toggleTm(force) {
+  const open = $('tm').classList.toggle('open', force);
+  $('tmBtn').classList.toggle('on', open);
+  clearInterval(tmTimer);
+  if (open) { if (!tmData) $('tmList').innerHTML = '<div class="fb-msg">Loading…</div>'; refreshTm(); tmTimer = setInterval(refreshTm, 3000); }
+  else tmData = null;
+}
+$('tmBtn').onclick = () => toggleTm();
+$('tmClose').onclick = () => toggleTm(false);
+$('tmRefresh').onclick = () => refreshTm();
+$('tmSearch').addEventListener('input', renderTm);
+$('tmSearch').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') toggleTm(false); });
+$('tmHead').querySelectorAll('[data-sort]').forEach(b => b.onclick = () => {
+  tmSort = b.dataset.sort; $('tmHead').querySelectorAll('[data-sort]').forEach(x => x.classList.toggle('on', x === b)); renderTm();
+});
+
+// ================= REMOTE RESTART & AUTO-RECONNECT =================
+let hostRebooting = false, restartWait = null, restartTimer = null, restartBack = 0;
+async function onRebootRequest() {
+  if (!P.control || hostPaused) return send({ t: 'reboot-r', error: 'Your partner hasn’t allowed control' });
+  const ok = await window.dw.reboot();
+  if (!ok) return send({ t: 'reboot-r', error: 'The remote PC refused to restart' });
+  const unattended = !!(S.unattended && await window.dw.authHas());
+  send({ t: 'reboot-r', ok: true, unattended, startup: !!S.startup });
+  hostRebooting = true; toast('Your partner is restarting this PC…', 5000);
+  setTimeout(() => { hostRebooting = false; }, 120e3); // in case the restart was cancelled
+  setTimeout(endAll, 800);
+}
+function onRebootReply(m) {
+  if (m.error) return toast(m.error, 2600);
+  if (!m.startup) toast('Heads-up: UniDesk isn’t set to start with Windows there, so someone may need to open it', 5000);
+  else if (!m.unattended) toast('Unattended access is off there, so someone will need to accept when it’s back', 5000);
+  startRestartWait(viewerTarget);
+}
+function startRestartWait(id) {
+  restartWait = { id, since: Date.now(), until: Date.now() + 5 * 60e3, next: Date.now() + 25e3 };
+  byeReceived = true; endAll({ quiet: true });
+  clearInterval(restartTimer); restartTimer = setInterval(restartTick, 1000); restartTick();
+}
+function restartTick() {
+  const w = restartWait; if (!w) return;
+  const now = Date.now();
+  if (now > w.until) { stopRestartWait(); overlay('fail', 'Still offline', 'The PC didn’t come back within 5 minutes.'); setTimeout(() => overlay(null), 2600); return; }
+  if (role) return; // an attempt is in progress; its own overlay is showing
+  const s = Math.round((now - w.since) / 1000);
+  overlay('wait', `Restarting <span>${fmt(w.id)}</span>`, `Waiting for the PC to come back · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+  if (now >= w.next) { w.next = now + 8000; connect(w.id, true); }
+}
+function stopRestartWait() { restartWait = null; clearInterval(restartTimer); }
+
+// ================= PRIVACY SCREEN =================
+// The visitor blacks out the host's monitors; the host's capture still shows the real desktop.
+let hostPrivacy = false, privOn = false;
+function setPrivBtn(on) { privOn = on; $('privBtn').classList.toggle('on', on); $('privBtn').title = on ? 'Privacy screen is on: click to show their screen again' : 'Privacy screen: black out the remote monitor'; }
+$('privBtn').onclick = () => {
+  if (remotePerms.control === false) return toast('Remote control is off', 1600);
+  $('privBtn').disabled = true; send({ t: 'privacy', on: !privOn });
+  setTimeout(() => { $('privBtn').disabled = false; }, 4000);
+};
+async function onPrivacyRequest(m) {
+  const reply = (d) => send({ t: 'privacy-r', ...d });
+  if (m.on && (!P.control || hostPaused)) return reply({ on: false, error: 'Your partner hasn’t allowed control' });
+  const r = await window.dw.privacy(!!m.on, 'Your partner');
+  hostPrivacy = !!(r.ok && r.on);
+  reply({ on: hostPrivacy, error: r.ok ? undefined : (r.error || 'The privacy screen isn’t available on that PC') });
+}
+function onPrivacyReply(m) {
+  $('privBtn').disabled = false;
+  if (m.error) { setPrivBtn(false); return toast(m.error, 2400); }
+  const was = privOn; setPrivBtn(!!m.on);
+  if (m.on && !was) toast('Privacy screen on: their monitor is black, you still see it', 2600);
+  else if (!m.on && was) toast(m.local ? 'Your partner turned the privacy screen off' : 'Privacy screen off', 2200);
+}
+window.dw.onPrivacyEnded(() => { if (!hostPrivacy) return; hostPrivacy = false; send({ t: 'privacy-r', on: false, local: true }); toast('Your screen is visible again', 2000); });
+
+// ================= RECORD INCOMING SESSIONS (host) =================
+// A security record of what visitors did on this PC. The visitor is always told.
+let hostRec = null;
+async function hostRecStart(who, again) {
+  if (hostRec || !stream) return;
+  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
+  let rec; try { rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2_500_000 }); } catch { return; }
+  const id = await window.dw.recInStart(`Incoming ${String(who).replace(/\D/g, '') || 'visitor'} ${stamp()}.webm`);
+  const me = { rec, id, who, done: null };
+  me.done = new Promise((res) => { rec.onstop = async () => { await new Promise(r => setTimeout(r, 300)); await window.dw.recEnd(id); res(); }; });
+  rec.ondataavailable = async (e) => { if (e.data.size) window.dw.recChunk(id, await e.data.arrayBuffer()); };
+  rec.start(2000); hostRec = me;
+  send({ t: 'rec-on', again: !!again });
+  if (!again) toast('Recording this session to Videos\\UniDesk\\Incoming', 2400);
+}
+async function hostRecStop() {
+  const r = hostRec; if (!r) return; hostRec = null;
+  try { if (r.rec.state !== 'inactive') r.rec.stop(); else await window.dw.recEnd(r.id); } catch {}
+  await r.done;
+}
+$('recInOpen').onclick = () => window.dw.recInOpen();
+setTimeout(() => { if (S.recKeep && S.recKeep !== '0') window.dw.recInPrune(S.recKeep); }, 8000);
+
+// ================= SLEEP / SIGN OUT / SHUT DOWN =================
+async function onPowerRequest(m) {
+  const reply = (d) => send({ t: 'power-r', what: m.what, ...d });
+  if (!P.control || hostPaused) return reply({ error: 'Your partner hasn’t allowed control' });
+  if (!['sleep', 'signout', 'shutdown'].includes(m.what)) return;
+  const ok = await window.dw.power(m.what);
+  if (!ok) return reply({ error: 'The remote PC refused' });
+  reply({ ok: true });
+  toast({ sleep: 'Your partner is putting this PC to sleep…', signout: 'Your partner is signing you out…', shutdown: 'Your partner is shutting down this PC…' }[m.what], 5000);
+  setTimeout(endAll, 800);
+}
+function onPowerReply(m) {
+  if (m.error) return toast(m.error, 2600);
+  toast({ sleep: 'The PC is going to sleep. Wake it from your address book with Wake-on-LAN.', signout: 'The user is being signed out', shutdown: 'The PC is shutting down' }[m.what] || 'Done', 4000);
+}
+
+// ================= BLOCK THEIR MOUSE & KEYBOARD =================
+// The visitor can lock out the host's physical input; the visitor's own input still works.
+// Safety: lifted when control is taken away, sharing is paused, the session ends, or the
+// visitor goes silent for 15 s. Ctrl+Alt+Del on the host always lifts it (Windows rule).
+let hostBlock = false, blockOn = false, lastRx = 0, hbTimer = null, blockWatch = null;
+function setBlockBtn(on) {
+  blockOn = on; $('blockBtn').classList.toggle('on', on);
+  $('blockBtn').title = on ? 'Their mouse & keyboard are blocked: click to give them back' : 'Block their mouse & keyboard';
+  clearInterval(hbTimer); if (on) hbTimer = setInterval(() => send({ t: 'hb' }), 4000);
+}
+$('blockBtn').onclick = () => {
+  if (remotePerms.control === false) return toast('Remote control is off', 1600);
+  $('blockBtn').disabled = true; send({ t: 'block', on: !blockOn });
+  setTimeout(() => { $('blockBtn').disabled = false; }, 4000);
+};
+function unblockHost(tell = true) {
+  hostBlock = false; clearInterval(blockWatch); window.dw.blockInput(false);
+  if (tell) send({ t: 'block-r', on: false, auto: true });
+}
+async function onBlockRequest(m) {
+  const reply = (d) => send({ t: 'block-r', ...d });
+  if (m.on && (!P.control || hostPaused)) return reply({ on: false, error: 'Your partner hasn’t allowed control' });
+  const r = await window.dw.blockInput(!!m.on);
+  hostBlock = !!(r.ok && r.on); clearInterval(blockWatch);
+  if (hostBlock) { lastRx = Date.now(); blockWatch = setInterval(() => { if (hostBlock && Date.now() - lastRx > 15000) { unblockHost(false); toast('Your mouse and keyboard work again', 2400); } }, 2000); }
+  reply({ on: hostBlock, error: r.ok ? undefined : r.error });
+}
+function onBlockReply(m) {
+  $('blockBtn').disabled = false;
+  if (m.error) { setBlockBtn(false); return toast(m.error, 2600); }
+  const was = blockOn; setBlockBtn(!!m.on);
+  if (m.on && !was) toast('Their mouse and keyboard are blocked. Pressing Ctrl+Alt+Del there gives them back.', 3200);
+  else if (!m.on && was) toast(m.auto ? 'Their mouse and keyboard work again' : 'Unblocked their mouse and keyboard', 2200);
+}
+
+// ================= FILE MANAGER ACTIONS (viewer) =================
+const binName = () => /mac|darwin/i.test(remoteInfo?.os || '') ? 'Trash' : 'Recycle Bin';
+let fbMode = null, fbTarget = null;
+function fbButtons() {
+  const can = !!fsCwd && remotePerms.files !== false;
+  $('fbNew').disabled = $('fbUpload').disabled = !can;
+}
+function fbAskOpen(mode, entry) {
+  fbMode = mode; fbTarget = entry || null;
+  $('fbAskOk').textContent = mode === 'rename' ? 'Rename' : 'Create';
+  $('fbAskIn').value = mode === 'rename' ? entry.name : 'New folder';
+  $('fbAsk').classList.add('show');
+  const inp = $('fbAskIn'); inp.focus();
+  const dot = mode === 'rename' && !entry.dir ? entry.name.lastIndexOf('.') : -1;
+  inp.setSelectionRange(0, dot > 0 ? dot : inp.value.length);
+}
+function fbAskClose() { fbMode = fbTarget = null; $('fbAsk').classList.remove('show'); }
+$('fbAskX').onclick = fbAskClose;
+$('fbAskIn').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); fbAskClose(); } });
+$('fbAsk').onsubmit = async (e) => {
+  e.preventDefault();
+  const name = $('fbAskIn').value.trim(); if (!name || !fsCwd) return;
+  if (fbMode === 'rename' && name === fbTarget.name) return fbAskClose();
+  $('fbAskOk').disabled = true;
+  const r = fbMode === 'rename' ? await fsAsk('rename', { path: fbTarget.path, name }) : await fsAsk('mkdir', { path: fsCwd.path, name });
+  $('fbAskOk').disabled = false;
+  if (r.error) return toast(r.error, 2400);
+  toast(fbMode === 'rename' ? `Renamed to ${name}` : `Created ${name}`, 1800);
+  fbAskClose(); browseTo(fsCwd.path);
+};
+$('fbNew').onclick = () => fsCwd && fbAskOpen('mkdir');
+async function fbUpload(files) {
+  if (!fsCwd || !files.length) return;
+  if (remotePerms.files === false) return toast('Your partner hasn’t allowed file transfer', 2200);
+  const dir = fsCwd.path; await sendFiles(files, dir);
+  setTimeout(() => { if (fsCwd?.path === dir && $('fb').classList.contains('open')) browseTo(dir); }, 900);
+}
+$('fbUpload').onclick = () => $('fbPick').click();
+$('fbPick').onchange = (e) => { const f = [...e.target.files]; e.target.value = ''; fbUpload(f); };
+{
+  let depth = 0; const fb = $('fb');
+  fb.addEventListener('dragenter', (e) => { if (!fsCwd || !e.dataTransfer.types.includes('Files')) return; e.preventDefault(); depth++; fb.classList.add('dropping'); });
+  fb.addEventListener('dragover', (e) => { if (fsCwd) e.preventDefault(); });
+  fb.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; fb.classList.remove('dropping'); } });
+  fb.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); depth = 0; fb.classList.remove('dropping'); if (e.dataTransfer.files.length) fbUpload([...e.dataTransfer.files]); });
+}

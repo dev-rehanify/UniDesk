@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.6",
+    "koffi": "2.9.2",
     "peerjs": "^1.5.4",
     "ws": "^8.23.0"
   },
@@ -54,19 +55,34 @@
       "!scripts/**",
       "!*.md",
       "!.github/**",
-      "!server/**"
+      "!server/**",
+      "!native/**",
+      "!node_modules/koffi/{src,vendor,doc}/**",
+      "!node_modules/koffi/build/koffi/{linux_*,freebsd_*,openbsd_*,musl_*,win32_ia32,win32_arm64}/**"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/**"
     ],
     "artifactName": "UniDesk-${version}-${os}-${arch}.${ext}",
     "win": {
       "target": [
         "zip",
         "nsis"
+      ],
+      "requestedExecutionLevel": "requireAdministrator",
+      "extraResources": [
+        {
+          "from": "native/UniDeskHelper.exe",
+          "to": "helper/UniDeskHelper.exe"
+        }
       ]
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "include": "build/installer.nsh"
     },
     "mac": {
       "category": "public.app-category.utilities",

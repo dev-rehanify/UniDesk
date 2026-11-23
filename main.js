@@ -6,6 +6,8 @@ const crypto = require('crypto');
 
 // Optional separate profile (for testing two instances on one PC): UNIDESK_PROFILE=name
 if (process.env.UNIDESK_PROFILE) app.setPath('userData', path.join(app.getPath('appData'), 'UniDesk-' + process.env.UNIDESK_PROFILE.replace(/[^\w-]/g, '')));
+// Windows identity: taskbar, notifications and shortcuts show "UniDesk" (same id the installer uses)
+if (process.platform === 'win32') app.setAppUserModelId('com.unidesk.app');
 
 // Single instance: a second launch just focuses the running app
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
@@ -496,8 +498,32 @@ function createWindow() {
   win.once('ready-to-show', () => { if (!hidden) win.show(); });
   win.on('close', (e) => { if (mainPrefs.tray && !quitting) { e.preventDefault(); win.hide(); trayHint(); } });
 }
+// Portable Windows copy: its .exe is Electron's unchanged official file (so Smart App Control lets it run),
+// which means the file itself can't carry UniDesk's icon. Start menu and desktop shortcuts named "UniDesk"
+// with the UniDesk icon (and the same app id) make UniDesk what people see and pin.
+function ensurePortableShortcuts() {
+  if (process.platform !== 'win32' || !app.isPackaged || !isPortable()) return;
+  const icon = path.join(process.resourcesPath, 'app', 'assets', 'icon.ico');
+  if (!fs.existsSync(icon)) return;   // packed (asar) builds: Explorer can't read an icon from inside the archive
+  const opts = { target: process.execPath, cwd: path.dirname(process.execPath), description: 'UniDesk remote desktop', icon, iconIndex: 0, appUserModelId: 'com.unidesk.app' };
+  const base = process.env.UNIDESK_SHORTCUT_DIR;   // tests only: keep test shortcuts out of the real Start menu / desktop
+  const startMenu = path.join(base || path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs'), 'UniDesk.lnk');
+  const desktop = path.join(base ? path.join(base, 'Desktop') : app.getPath('desktop'), 'UniDesk.lnk');
+  const flag = path.join(app.getPath('userData'), 'shortcuts.json');
+  const put = (p) => {
+    try {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      let cur = null; try { cur = shell.readShortcutLink(p); } catch {}
+      if (!cur) shell.writeShortcutLink(p, 'create', opts);
+      else if (cur.target !== opts.target || cur.icon !== opts.icon) shell.writeShortcutLink(p, 'replace', opts);   // the folder was moved
+    } catch {}
+  };
+  put(startMenu);
+  if (!fs.existsSync(flag)) { put(desktop); try { fs.writeFileSync(flag, JSON.stringify({ created: Date.now() })); } catch {} }   // desktop once: if deleted, it stays deleted
+  else if (fs.existsSync(desktop)) put(desktop);
+}
 app.whenReady().then(() => {
-  createWindow(); createTray();
+  createWindow(); createTray(); ensurePortableShortcuts();
   if (app.isPackaged) setTimeout(() => ensureService().catch(() => {}), 4000); // install/update the Secure Desktop service
 });
 app.on('window-all-closed', () => app.quit());

@@ -130,6 +130,7 @@ function sendPerms() {
   // taking control away also lifts the privacy screen
   if (!P.control && hostPrivacy) { hostPrivacy = false; window.dw.privacy(false); send({ t: 'privacy-r', on: false }); }
   if (!P.control && hostBlock) unblockHost();
+  repPerms();
   send({ t: 'perms', ...P });
 }
 let remotePerms = { control: true, files: true, clip: true };
@@ -250,8 +251,8 @@ async function acceptHost(c, who, how, perms) {
     if (how === 'unattended' || how === 'code') {
       try { new Notification('UniDesk', { body: `${who} connected with unattended access`, silent: false }); } catch {}
     }
-    logHistory({ dir: 'in', id: who, how });
-    if (S.hideWall && !IS_MAC) { await window.dw.wallpaperHide().catch(() => {}); await new Promise(r => setTimeout(r, 250)); }
+    logHistory({ dir: 'in', id: who, how }); repStart(who, how);
+    if (S.hideWall && !IS_MAC) { await window.dw.wallpaperHide().catch(() => {}); await new Promise(r => setTimeout(r, 250)); }   // Windows, and GNOME/Cinnamon/MATE on Linux
     try {
       screens = await window.dw.screens(false);
       curScreen = Math.max(0, screens.findIndex(s => s.primary));
@@ -481,8 +482,8 @@ function wireData(c) {
       case 'screens': remoteScreens = m.list; curScreen = m.cur; renderScreens(); break;
       case 'screen': curScreen = m.i; renderScreens(); setTimeout(() => $('video').classList.remove('switching'), 250); toast(`Now viewing Screen ${m.i + 1}`, 1600); break;
       case 'thumbs': if (role === 'host') sendScreens(); break;
-      case 'clip': if (role === 'host' && !P.clip) break; lastClip = m.text; window.dw.clipWrite(m.text); if (role === 'viewer') addClipHist(m.text); break;
-      case 'chat': addChat(m.text, false); break;
+      case 'clip': if (role === 'host' && !P.clip) break; repN('clipIn'); lastClip = m.text; window.dw.clipWrite(m.text); if (role === 'viewer') addClipHist(m.text); break;
+      case 'chat': addChat(m.text, false); repN('chatIn'); break;
       case 'perms': {
         const was = remotePerms; remotePerms = m;
         if (!m.control && was.control !== false) toast('Partner allows view only', 2600);
@@ -514,10 +515,10 @@ function wireData(c) {
       case 'block-r': if (role === 'viewer') onBlockReply(m); break;
       case 'privacy': if (role === 'host') onPrivacyRequest(m); break;
       case 'privacy-r': if (role === 'viewer') onPrivacyReply(m); break;
-      case 'file-start': if (role === 'host' && !P.files) break; if (role !== 'host' || !P.browse) delete m.dir; window.dw.fileStart(m); toast(`Receiving ${m.name}…`); break;
+      case 'file-start': if (role === 'host' && !P.files) break; if (role !== 'host' || !P.browse) delete m.dir; window.dw.fileStart(m); toast(`Receiving ${m.name}…`); repN('filesIn'); repN('bytesIn', +m.size || 0); repEv(`Sent you the file ${String(m.name).slice(0, 120)} (${fmtSize(+m.size || 0)})${m.dir ? ' into ' + String(m.dir).slice(0, 120) : ''}`); break;
       case 'file-chunk': if (role === 'host' && !P.files) break; window.dw.fileChunk(m); break;
       case 'file-end': if (role === 'host' && !P.files) break; window.dw.fileEnd(m); break;
-      case 'term-in': if (role === 'host' && P.terminal) window.dw.termInput(String(m.d || '')); break;
+      case 'term-in': if (role === 'host' && P.terminal) { window.dw.termInput(String(m.d || '')); String(m.d || '').split('\n').map(s => s.trim()).filter(Boolean).forEach(s => repEv('Ran in the terminal: ' + s)); } break;
       case 'term-out': if (role === 'viewer') termWrite(m.d); break;
       default: if (role === 'host' && P.control && !hostPaused) window.dw.input(m);
     }
@@ -570,7 +571,7 @@ function startClipSync() {
     const st = await window.dw.clipState(); const t = st.text;
     // Text and images replace each other on the clipboard, so a new one of either kind clears the memory
     // of the other: copying image A, then text, then image A again must send A again (and the same for text).
-    if (t && t !== lastClip && t.length < 1_000_000) { lastClip = t; lastImgHash = null; send({ t: 'clip', text: t }); }
+    if (t && t !== lastClip && t.length < 1_000_000) { lastClip = t; lastImgHash = null; send({ t: 'clip', text: t }); repN('clipOut'); }
     else if (!t && st.imgHash && st.imgHash !== lastImgHash && !ciSending) {
       ciSending = true; try { if (await sendClipImage()) { lastImgHash = st.imgHash; lastClip = ''; } } finally { ciSending = false; }
     }
@@ -596,7 +597,7 @@ async function sendFiles(list, dir) {
       const dc = conn?.dataChannel; while (dc && dc.bufferedAmount > 4 * 1024 * 1024) await new Promise(r => setTimeout(r, 20));
       bar.style.width = ((o + part.length) / buf.length * 100) + '%';
     }
-    send({ t: 'file-end', id }); toast(`Sent ${f.name}`);
+    send({ t: 'file-end', id }); toast(`Sent ${f.name}`); repN('filesOut'); repN('bytesOut', f.size); repEv(`You sent the file ${String(f.name).slice(0, 120)} (${fmtSize(f.size)})`);
   }
   setTimeout(() => { $('progress').classList.remove('show'); bar.style.width = 0; }, 600);
 }
@@ -612,7 +613,7 @@ function toggleChat(force) {
   const open = $('chat').classList.toggle('open', force);
   if (open) { $('chatBadge').classList.remove('show'); setTimeout(() => $('chatInput').focus(), 200); }
 }
-function sendChat() { const v = $('chatInput').value.trim(); if (!v) return; send({ t: 'chat', text: v }); addChat(v, true); $('chatInput').value = ''; }
+function sendChat() { const v = $('chatInput').value.trim(); if (!v) return; send({ t: 'chat', text: v }); addChat(v, true); repN('chatOut'); $('chatInput').value = ''; }
 $('chatBtn').onclick = () => toggleChat(); $('hostChat').onclick = () => toggleChat(); $('chatClose').onclick = () => toggleChat(false);
 $('chatSend').onclick = sendChat;
 $('chatInput').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') sendChat(); if (e.key === 'Escape') toggleChat(false); });
@@ -640,7 +641,7 @@ function startIdleWatch() {
     const mins = +S.idleMins || 0;
     if (role === 'host' && mins > 0 && Date.now() - lastActivity > mins * 60e3) {
       send({ t: 'chat', text: `Session ended after ${mins} min of inactivity.` });
-      toast(`Session ended: idle for ${mins} min`, 4000); endAll(); return;
+      repWhy = `Ended after ${mins} min of inactivity`; toast(`Session ended: idle for ${mins} min`, 4000); endAll(); return;
     }
     // Session length limit: warn the visitor a minute before, then end the session.
     const max = +S.maxMins || 0;
@@ -648,7 +649,7 @@ function startIdleWatch() {
       const left = max * 60e3 - (Date.now() - sessStart);
       if (left <= 0) {
         send({ t: 'chat', text: `Session ended: this PC allows sessions of up to ${limitText(max)}.` });
-        toast(`Session ended: time limit of ${limitText(max)} reached`, 4000); endAll();
+        repWhy = `Ended at the ${limitText(max)} time limit`; toast(`Session ended: time limit of ${limitText(max)} reached`, 4000); endAll();
       } else if (left <= 60e3 && !limitWarned) {
         limitWarned = true;
         send({ t: 'chat', text: `This session will end in about 1 minute (this PC allows sessions of up to ${limitText(max)}).` });
@@ -660,6 +661,7 @@ function startIdleWatch() {
 
 function endAll(opts = {}) {
   const wasHost = role === 'host', how = hostHow;
+  if (wasHost && sessRep) sessRep.why = repWhy || (byeReceived ? 'The visitor ended the session' : 'The connection closed');
   send({ t: 'bye' });
   clearInterval(idleTimer); hostHow = null;
   if (wasHost) { window.dw.drawClose(); window.dw.secureStop(); window.dw.termStop(); window.dw.wallpaperRestore(); hostRecStop(); }
@@ -753,7 +755,7 @@ $('connectBtn').onclick = () => connect();
 const copyId = () => { if (!myId) return; navigator.clipboard.writeText(myId); toast('Address copied to clipboard', 1800); };
 $('myId').onclick = copyId; $('copyBtn').onclick = copyId;
 $('cancelBtn').onclick = () => { stopRestartWait(); clearTimeout(connectTimer); try { conn?.close(); } catch {} conn = null; role = null; overlay(null); };
-$('endBtn').onclick = () => endAll(); $('stopHost').onclick = () => endAll();
+$('endBtn').onclick = () => endAll(); $('stopHost').onclick = () => { repWhy = 'You ended the session'; endAll(); };
 $('fullBtn').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
 document.addEventListener('fullscreenchange', () => { document.body.classList.toggle('fs', !!document.fullscreenElement); revealToolbar(); });
 $('ctrlBtn').onclick = () => {
@@ -897,9 +899,14 @@ function logHistory(entry) {
   renderHistory();
 }
 function closeHistory() {
-  if (!currentLog) return;
+  if (!currentLog) { sessRep = null; repWhy = ''; return; }
   const h = readHistory(); const e = h.find(x => x.start === currentLog); if (e) e.end = Date.now();
-  try { localStorage.setItem('ud-history', JSON.stringify(h)); } catch {} currentLog = null; renderHistory();
+  let saved = false;
+  if (e && sessRep) { const { lastP, ...r } = sessRep; e.report = r; saved = true; }
+  h.forEach((x, i) => { if (i >= 20) delete x.report; });   // keep full reports for the latest 20 sessions
+  try { localStorage.setItem('ud-history', JSON.stringify(h)); } catch {}
+  currentLog = null; sessRep = null; repWhy = ''; renderHistory();
+  if (saved) toast('Session report saved in Settings › Session history', 3200);
 }
 function dur(ms) { const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m`; }
 function renderHistory() {
@@ -912,10 +919,66 @@ function renderHistory() {
     const when = new Date(e.start).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     r.innerHTML = `<span class="hdir ${e.dir}">${e.dir === 'in' ? '↘' : '↗'}</span>
       <div class="txt"><b class="mono">${e.id}</b><span>${e.dir === 'in' ? 'Connected to you' : 'You connected'} · ${when}${e.end && e.how !== 'declined' && e.how !== 'blocked' ?' · ' + dur(e.end - e.start) : ''}</span></div>
-      <span class="htag ${e.how}">${labels[e.how] || e.how}</span>`;
+      <span class="htag ${e.how}">${labels[e.how] || e.how}</span>${e.report ? '<button class="link-btn rep-btn">Report</button>' : ''}`;
+    if (e.report) r.querySelector('.rep-btn').onclick = () => openReport(e);
     box.appendChild(r);
   });
 }
+// ================= SESSION REPORT (host) =================
+// What a visitor did on this PC: files, file changes, terminal commands, ended programs, links, power.
+// Stored only on this PC, with the session's history entry.
+let sessRep = null, repWhy = '';
+function repStart(who, how) { sessRep = { who, how, perms: { ...P }, ev: [], n: { chatIn: 0, chatOut: 0, clipIn: 0, clipOut: 0, filesIn: 0, filesOut: 0, bytesIn: 0, bytesOut: 0 }, lastP: null }; repWhy = ''; }
+function repEv(text) { if (role !== 'host' || !sessRep || !text) return; if (sessRep.ev.length < 300) sessRep.ev.push({ t: Date.now(), d: String(text).slice(0, 240) }); else sessRep.cut = true; }
+function repN(k, by = 1) { if (role === 'host' && sessRep) sessRep.n[k] += by; }
+const PERM_NAMES = { control: 'control', files: 'files', clip: 'clipboard', terminal: 'terminal', browse: 'file browsing' };
+function repPerms() {
+  if (role !== 'host' || !sessRep) return;
+  const was = sessRep.lastP; sessRep.lastP = { ...P };
+  if (!was) { sessRep.perms = { ...P }; return; }
+  const on = Object.keys(PERM_NAMES).filter(k => P[k] && !was[k]), off = Object.keys(PERM_NAMES).filter(k => !P[k] && was[k]);
+  if (on.length) repEv('You allowed ' + on.map(k => PERM_NAMES[k]).join(', '));
+  if (off.length) repEv('You took away ' + off.map(k => PERM_NAMES[k]).join(', '));
+}
+const HOW_TEXT = { approved: 'You accepted the request', unattended: 'Unattended access (password)', code: 'One-time code' };
+function reportText(e) {
+  const r = e.report, at = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const allowed = Object.keys(PERM_NAMES).filter(k => r.perms?.[k]).map(k => PERM_NAMES[k]).join(', ') || 'view only';
+  const lines = [
+    'UniDesk session report',
+    `Visitor: ${e.id}`,
+    `Started: ${new Date(e.start).toLocaleString()}`,
+    `Length: ${e.end ? dur(e.end - e.start) : 'unknown'}`,
+    `How they got in: ${HOW_TEXT[e.how] || e.how}`,
+    `Allowed at the start: ${allowed}`,
+    `Ended: ${r.why || 'unknown'}`,
+    `Files: ${r.n.filesIn} received (${fmtSize(r.n.bytesIn)}), ${r.n.filesOut} sent (${fmtSize(r.n.bytesOut)})`,
+    `Clipboard: ${r.n.clipIn} copied to this PC, ${r.n.clipOut} copied from it`,
+    `Chat: ${r.n.chatIn} messages received, ${r.n.chatOut} sent`,
+    '',
+    r.ev.length ? 'What happened:' : 'No files, commands or other actions.',
+    ...r.ev.map(x => `  ${at(x.t)}  ${x.d}`),
+  ];
+  if (r.cut) lines.push('  (more actions were not recorded: the report keeps the first 300)');
+  return lines.join('\n');
+}
+let repOpen = null;
+function openReport(e) {
+  repOpen = e; const r = e.report;
+  $('repSub').textContent = `${e.id} · ${new Date(e.start).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${e.end ? dur(e.end - e.start) : ''}`;
+  const allowed = Object.keys(PERM_NAMES).filter(k => r.perms?.[k]).map(k => PERM_NAMES[k]).join(', ') || 'view only';
+  const facts = [['How they got in', HOW_TEXT[e.how] || e.how], ['Allowed', allowed], ['Ended', r.why || 'unknown'],
+    ['Files', `${r.n.filesIn} received · ${r.n.filesOut} sent`], ['Clipboard', `${r.n.clipIn} in · ${r.n.clipOut} out`], ['Chat', `${r.n.chatIn} received · ${r.n.chatOut} sent`]];
+  $('repFacts').innerHTML = facts.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
+  const at = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  $('repList').innerHTML = r.ev.length ? r.ev.map(x => `<li><time>${at(x.t)}</time><span>${esc(x.d)}</span></li>`).join('') + (r.cut ? '<li class="more"><span>More actions happened but only the first 300 are kept.</span></li>' : '')
+    : '<li class="none"><span>No files, commands or other actions in this session.</span></li>';
+  $('repDialog').classList.add('show');
+}
+$('repClose').onclick = () => { $('repDialog').classList.remove('show'); repOpen = null; };
+$('repCopy').onclick = () => { if (!repOpen) return; window.dw.clipWrite(reportText(repOpen)); toast('Report copied as text', 1600); };
+$('repDialog').addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('repClose').click(); });
+$('repDialog').addEventListener('click', (ev) => { if (ev.target === $('repDialog')) $('repClose').click(); });
 $('clearHistory').onclick = () => { try { localStorage.removeItem('ud-history'); } catch {} renderHistory(); toast('History cleared', 1500); };
 renderHistory();
 
@@ -1469,13 +1532,14 @@ async function onFsRequest(m) {
     if (!P.files) return reply({ error: 'Your partner hasn’t allowed file changes' });
     const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || '';
     const r = m.op === 'mkdir' ? await window.dw.fsMkdir(m.path, m.name) : m.op === 'rename' ? await window.dw.fsRename(m.path, m.name) : await window.dw.fsTrash(m.path);
+    if (r.ok) repEv(m.op === 'mkdir' ? `Created the folder ${r.path}` : m.op === 'rename' ? `Renamed ${m.path} to ${base(r.path)}` : `Moved ${m.path} to the ${/Mac/.test(navigator.userAgent) ? 'Trash' : 'Recycle Bin'}`);
     if (r.ok) toast(m.op === 'mkdir' ? `Your partner created the folder ${base(r.path)}` : m.op === 'rename' ? `Your partner renamed ${base(m.path)} to ${base(r.path)}` : `Your partner moved ${base(m.path)} to the ${/Mac/.test(navigator.userAgent) ? 'Trash' : 'Recycle Bin'}`, 3000);
     return reply(r);
   }
   if (m.op === 'get') {
     const st = await window.dw.fsStat(m.path); if (!st) return reply({ error: 'File not found' });
     if (st.size > 2 * 1024 ** 3) return reply({ error: 'Files over 2 GB are not supported' });
-    reply({ ok: true, size: st.size });
+    reply({ ok: true, size: st.size }); repN('filesOut'); repN('bytesOut', st.size); repEv(`Downloaded ${String(m.path).slice(0, 200)} (${fmtSize(st.size)})`);
     const id = crypto.randomUUID(); send({ t: 'file-start', id, name: st.name, size: st.size });
     for (let off = 0; off < st.size || off === 0; ) {
       const r = await window.dw.fsRead(m.path, off, 48 * 1024); if (!r || !r.n) break;
@@ -1550,7 +1614,7 @@ async function onPsRequest(m) {
   }
   if (m.op === 'kill') {
     const r = await window.dw.psKill(m.pid);
-    if (r.ok) toast(`Your partner ended ${String(m.name || 'a process').slice(0, 40)}`, 2600);
+    if (r.ok) { toast(`Your partner ended ${String(m.name || 'a process').slice(0, 40)}`, 2600); repEv(`Ended the program ${String(m.name || 'unknown').slice(0, 60)} (PID ${m.pid})`); }
     return reply(r);
   }
 }
@@ -1614,7 +1678,7 @@ async function onRebootRequest() {
   if (!ok) return send({ t: 'reboot-r', error: 'The remote PC refused to restart' });
   const unattended = !!(S.unattended && await window.dw.authHas());
   send({ t: 'reboot-r', ok: true, unattended, startup: !!S.startup });
-  hostRebooting = true; toast('Your partner is restarting this PC…', 5000);
+  hostRebooting = true; repEv('Restarted this PC'); repWhy = 'The PC was restarted'; toast('Your partner is restarting this PC…', 5000);
   setTimeout(() => { hostRebooting = false; }, 120e3); // in case the restart was cancelled
   setTimeout(endAll, 800);
 }
@@ -1653,7 +1717,8 @@ async function onPrivacyRequest(m) {
   const reply = (d) => send({ t: 'privacy-r', ...d });
   if (m.on && (!P.control || hostPaused)) return reply({ on: false, error: 'Your partner hasn’t allowed control' });
   const r = await window.dw.privacy(!!m.on, 'Your partner');
-  hostPrivacy = !!(r.ok && r.on);
+  const wasPriv = hostPrivacy; hostPrivacy = !!(r.ok && r.on);
+  if (hostPrivacy !== wasPriv) repEv(hostPrivacy ? 'Turned on the privacy screen' : 'Turned off the privacy screen');
   reply({ on: hostPrivacy, error: r.ok ? undefined : (r.error || 'The privacy screen isn’t available on that PC') });
 }
 function onPrivacyReply(m) {
@@ -1778,7 +1843,7 @@ async function onPiRequest(m) {
   if (m.op === 'info') return reply({ info: await window.dw.sysinfoFull() });
   if (m.op === 'url') {
     const r = await window.dw.openUrl(m.url);
-    if (r.ok) toast(`Your partner opened ${r.host} in your browser`, 3000);
+    if (r.ok) { toast(`Your partner opened ${r.host} in your browser`, 3000); repEv('Opened a link: ' + String(m.url).slice(0, 200)); }
     return reply(r);
   }
 }
@@ -1854,7 +1919,7 @@ async function onPowerRequest(m) {
   if (!['sleep', 'signout', 'shutdown'].includes(m.what)) return;
   const ok = await window.dw.power(m.what);
   if (!ok) return reply({ error: 'The remote PC refused' });
-  reply({ ok: true });
+  reply({ ok: true }); repEv({ sleep: 'Put this PC to sleep', signout: 'Signed out the user', shutdown: 'Shut down this PC' }[m.what]); repWhy = 'The PC was put to sleep, signed out or shut down';
   toast({ sleep: 'Your partner is putting this PC to sleep…', signout: 'Your partner is signing you out…', shutdown: 'Your partner is shutting down this PC…' }[m.what], 5000);
   setTimeout(endAll, 800);
 }
@@ -1886,7 +1951,8 @@ async function onBlockRequest(m) {
   const reply = (d) => send({ t: 'block-r', ...d });
   if (m.on && (!P.control || hostPaused)) return reply({ on: false, error: 'Your partner hasn’t allowed control' });
   const r = await window.dw.blockInput(!!m.on);
-  hostBlock = !!(r.ok && r.on); clearInterval(blockWatch);
+  const wasBlock = hostBlock; hostBlock = !!(r.ok && r.on); clearInterval(blockWatch);
+  if (hostBlock !== wasBlock) repEv(hostBlock ? 'Blocked your mouse and keyboard' : 'Gave your mouse and keyboard back');
   if (hostBlock) { lastRx = Date.now(); blockWatch = setInterval(() => { if (hostBlock && Date.now() - lastRx > 15000) { unblockHost(false); toast('Your mouse and keyboard work again', 2400); } }, 2000); }
   reply({ on: hostBlock, error: r.ok ? undefined : r.error });
 }

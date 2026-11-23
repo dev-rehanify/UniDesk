@@ -339,7 +339,7 @@
         <div class="st-card">
           <div class="row"><svg class="ic"><use href="#i-lock"/></svg><div class="txt"><b>Lock this PC when a session ends</b><span>Windows locks as soon as the visitor disconnects</span></div>
             <div class="seg" data-seg="lockOnEnd"><button data-v="never">Never</button><button data-v="unattended">Unattended</button><button data-v="always">Always</button></div></div>
-          <div class="row"><svg class="ic"><use href="#i-screen"/></svg><div class="txt"><b>Hide my wallpaper during sessions</b><span>A plain background makes the picture faster and sharper for your visitor. Your wallpaper comes back when they leave (Windows).</span></div>
+          <div class="row"><svg class="ic"><use href="#i-screen"/></svg><div class="txt"><b>Hide my wallpaper during sessions</b><span>A plain background makes the picture faster and sharper for your visitor. Your wallpaper comes back when they leave (Windows, and GNOME, Cinnamon or MATE on Linux).</span></div>
             <label class="switch"><input type="checkbox" data-set="hideWall"><i></i></label></div>
           <div class="row"><span class="rec-dot ic-rec"></span><div class="txt"><b>Record incoming sessions</b><span>Saves what visitors do on this PC to Videos\UniDesk\Incoming. Visitors are told the session is recorded.</span></div>
             <button class="btn-soft" id="recInOpen">Open folder</button><label class="switch"><input type="checkbox" data-set="recIncoming"><i></i></label></div>
@@ -435,6 +435,16 @@
 </div>
 
 <!-- ============ RENAME DIALOG ============ -->
+<div class="modal" id="repDialog">
+  <div class="modal-card rep-card" tabindex="-1">
+    <div class="modal-icon"><svg class="ic"><use href="#i-clock"/></svg></div>
+    <h3>Session report</h3>
+    <p id="repSub"></p>
+    <div class="rep-facts" id="repFacts"></div>
+    <ol class="rep-list" id="repList"></ol>
+    <div class="modal-actions"><button class="ghost-btn" id="repCopy">Copy as text</button><button class="primary" id="repClose"><span>Close</span></button></div>
+  </div>
+</div>
 <div class="modal" id="nameDialog">
   <div class="modal-card">
     <div class="modal-icon"><svg class="ic"><use href="#i-screen"/></svg></div>

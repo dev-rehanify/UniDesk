@@ -679,3 +679,20 @@ html.mac .aurora { background: var(--bg); }
 .desk-txt .desk-note { font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
 .modal-card textarea { width: 100%; padding: 10px 13px; margin-top: 8px; border-radius: 11px; border: 1px solid var(--stroke); background: var(--field-bg); color: inherit; font: inherit; font-size: 13.5px; resize: vertical; min-height: 64px; max-height: 180px; outline: none; transition: border-color .2s, box-shadow .2s; }
 .modal-card textarea:focus { border-color: var(--a1); box-shadow: 0 0 0 4px rgba(91,140,255,.14); }
+
+/* session report */
+.rep-btn { margin-left: 8px; flex: none; }
+.rep-card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+.rep-card p { margin-bottom: 12px; }
+.rep-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin-bottom: 12px; }
+.rep-facts div { padding: 8px 10px; border-radius: 10px; background: var(--hover-bg); border: 1px solid var(--stroke); min-width: 0; }
+.rep-facts span { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--mute); }
+.rep-facts b { display: block; font-size: 12.5px; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+.rep-list { list-style: none; margin: 0 0 6px; padding: 4px; flex: 1; min-height: 60px; overflow: auto; border-radius: 12px; border: 1px solid var(--stroke); }
+.rep-list li { display: flex; gap: 10px; padding: 6px 8px; border-radius: 8px; font-size: 12.5px; }
+.rep-list li:nth-child(odd) { background: var(--hover-bg); }
+.rep-list time { flex: none; color: var(--mute); font-variant-numeric: tabular-nums; font-size: 11.5px; padding-top: 1px; }
+.rep-list span { min-width: 0; overflow-wrap: anywhere; }
+.rep-list li.none, .rep-list li.more { color: var(--mute); justify-content: center; text-align: center; background: none; }
+.rep-card > * { flex: none; }
+.rep-card > .rep-list { flex: 1 1 auto; }

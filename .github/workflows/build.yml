@@ -27,6 +27,7 @@ jobs:
             cmd: npx electron-builder --win zip nsis --x64 --publish never --config.directories.output=release
           - os: macos-latest        # Apple Silicon (arm64)
             cmd: npx electron-builder --mac dmg zip --arm64 --publish never --config.directories.output=release
+            test: mac
           - os: macos-latest        # Intel (x64), cross-built
             cmd: npx electron-builder --mac dmg zip --x64 --publish never --config.directories.output=release
           - os: ubuntu-latest       # Linux x64 AppImage
@@ -54,6 +55,10 @@ jobs:
         run: ${{ matrix.cmd }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Test the packaged Mac app (starts, privacy screen hidden from capture)
+        if: matrix.test == 'mac'
+        run: node scripts/mac-e2e.mjs release/mac-arm64/UniDesk.app/Contents/MacOS/UniDesk
+        timeout-minutes: 5
       - uses: actions/upload-artifact@v4
         with:
           name: unidesk-${{ strategy.job-index }}
@@ -78,14 +83,14 @@ jobs:
           path: dist
           name: unidesk-3
       - name: Install a virtual screen and test tools
-        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool libxtst6 libnss3 libasound2t64 libgbm1 xdg-user-dirs && xdg-user-dirs-update && cat ~/.config/user-dirs.dirs | grep DOWNLOAD
+        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool libxtst6 libnss3 libasound2t64 libgbm1 xdg-user-dirs dbus-x11 dconf-gsettings-backend gsettings-desktop-schemas && xdg-user-dirs-update && cat ~/.config/user-dirs.dirs | grep DOWNLOAD
       - name: Test a real session between two copies
         run: |
           echo "user namespaces restricted: $(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo n/a)"
           chmod +x dist/*.AppImage
           Xvfb :99 -screen 0 1280x800x24 &
           sleep 2
-          DISPLAY=:99 node scripts/linux-e2e.mjs dist/UniDesk-*-linux-x64.AppImage
+          DISPLAY=:99 dbus-run-session -- node scripts/linux-e2e.mjs dist/UniDesk-*-linux-x64.AppImage
 
   release:
     needs: [build, linux-test]

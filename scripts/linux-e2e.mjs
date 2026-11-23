@@ -52,6 +52,11 @@ check('A registered with the signaling server', !!(await ready(A)));
 check('B registered with the signaling server', !!(await ready(B)));
 const idA = await A(`myId`);
 
+// Wallpaper (GNOME settings, inside the test's D-Bus session): start from a picture wallpaper
+const gs = (...a) => { try { return execFileSync('gsettings', a, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return null; } };
+const hasGs = gs('set', 'org.gnome.desktop.background', 'picture-options', 'zoom') !== null && gs('get', 'org.gnome.desktop.background', 'picture-options') === "'zoom'";
+check('test desktop has GNOME wallpaper settings', hasGs);
+
 // 2. Connect and accept with control, files and terminal
 await B(`connect('${idA}'); true`);
 check('host sees the request', !!(await until(() => A(`$('reqCard').classList.contains('show')`), 30000)));
@@ -61,6 +66,9 @@ const vw = await B(`$('video').videoWidth + 'x' + $('video').videoHeight`);
 await sleep(2000);
 const bright = await B(`(() => { const v = $('video'); const c = document.createElement('canvas'); c.width = 64; c.height = 40; const g = c.getContext('2d'); g.drawImage(v, 0, 0, 64, 40); const d = g.getImageData(0, 0, 64, 40).data; let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) { s += d[i] + d[i+1] + d[i+2]; n++; } return Math.round(s / n / 3); })()`);
 check('picture arrives', /^\d+x\d+$/.test(vw) && vw !== '0x0', `${vw}, brightness ${bright}`);
+if (hasGs) check('wallpaper is hidden during the session', gs('get', 'org.gnome.desktop.background', 'picture-options') === "'none'", gs('get', 'org.gnome.desktop.background', 'picture-options'));
+const priv = await A(`window.dw.privacy(true, 'CI').then(JSON.stringify)`);
+check('privacy screen says clearly it is not available on Linux', /not available on Linux|isn’t available on Linux/.test(priv) && /"ok":false/.test(priv), priv);
 check('host reports Linux', /linux/i.test(String(await until(() => B(`remoteInfo?.os || ''`), 15000))), String(await B(`remoteInfo?.os`)));
 
 // 3. Mouse control
@@ -90,6 +98,7 @@ check('PC info panel works', /linux/i.test(String(info)) && /disks [1-9]/.test(S
 // 7. End
 await B(`$('endBtn').click(); true`);
 check('session ends on both sides', !!(await until(async () => (await A(`role === null`)) === true && (await B(`role === null`)) === true, 15000)));
+if (hasGs) check('wallpaper comes back after the session', !!(await until(() => gs('get', 'org.gnome.desktop.background', 'picture-options') === "'zoom'", 10000)), gs('get', 'org.gnome.desktop.background', 'picture-options'));
 
 procs.forEach(p => { try { p.kill('SIGKILL'); } catch {} });
 console.log('\n' + results.join('\n'));

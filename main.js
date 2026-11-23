@@ -376,7 +376,8 @@ ipcMain.on('draw-close', () => { if (overlayWin && !overlayWin.isDestroyed()) ov
 // so the person at this PC sees black while the visitor still sees the real desktop.
 let privacyWins = [];
 const PRIVACY_KEY = 'CommandOrControl+Alt+Shift+P';
-const privacyPage = (who) => 'data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:#000;color:#8a8fa3;font:15px/1.6 "Segoe UI",system-ui,sans-serif;cursor:none;user-select:none}div{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}b{color:#e9ebf5;font-size:22px;font-weight:600}kbd{font:12px ui-monospace,monospace;border:1px solid #333;border-radius:6px;padding:2px 7px;color:#c9ccd9}</style><div><b>This screen is hidden</b><span>${who} is working on this PC with UniDesk.</span><span>Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to show it again.</span></div>`);
+const MAC_KEYS = '<kbd>⌘ Command</kbd> + <kbd>⌥ Option</kbd> + <kbd>⇧ Shift</kbd> + <kbd>P</kbd>';
+const privacyPage = (who, bg = '#000') => 'data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:${bg};color:#8a8fa3;font:15px/1.6 "Segoe UI",system-ui,sans-serif;cursor:none;user-select:none}div{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}b{color:#e9ebf5;font-size:22px;font-weight:600}kbd{font:12px ui-monospace,monospace;border:1px solid #333;border-radius:6px;padding:2px 7px;color:#c9ccd9}</style><div><b>This screen is hidden</b><span>${who} is working on this PC with UniDesk.</span><span>Press ${process.platform === 'darwin' ? MAC_KEYS : '<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd>'} to show it again.</span></div>`);
 function privacyOff(notify = true) {
   const was = privacyWins.length > 0;
   privacyWins.forEach(w => { if (!w.isDestroyed()) w.destroy(); }); privacyWins = [];
@@ -394,10 +395,55 @@ function excludeFromCapture(w) {
     return setAffinity(Number(h.length >= 8 ? h.readBigUInt64LE(0) : h.readUInt32LE(0)), 0x11) !== 0;
   } catch { return false; }
 }
+// macOS: setContentProtection leaves a window out of screen capture, so the visitor sees what's underneath.
+// Older macOS versions may still capture it, so after showing the cover we grab one frame of the screen and
+// look for the cover's colour (a near-black no desktop is made of). If it shows up, we turn it off again.
+const MAC_COVER = [11, 2, 7];   // #0b0207
+async function coverLeaks() {
+  let checked = 0;
+  for (let attempt = 0; attempt < 3 && !checked; attempt++) {
+    if (attempt) await new Promise(r => setTimeout(r, 400));
+    let srcs = []; try { srcs = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 320, height: 200 } }); } catch { return null; }
+    for (const s of srcs) {
+      const bmp = s.thumbnail.toBitmap(), n = bmp.length / 4; if (!n) continue;
+      checked++; let hit = 0;
+      for (let i = 0; i < bmp.length; i += 4) if (Math.abs(bmp[i + 2] - MAC_COVER[0]) <= 4 && Math.abs(bmp[i + 1] - MAC_COVER[1]) <= 4 && Math.abs(bmp[i] - MAC_COVER[2]) <= 4) hit++;
+      if (hit / n > 0.3) return true;
+    }
+  }
+  return checked ? false : null;   // null: couldn't look at the screen at all
+}
+async function macPrivacyOn(who) {
+  const name = String(who || 'Your partner').replace(/[<>&"]/g, '').slice(0, 60);
+  for (const d of eScreen.getAllDisplays()) {
+    const w = new BrowserWindow({
+      ...d.bounds, frame: false, resizable: false, movable: false, focusable: false, skipTaskbar: true, backgroundColor: '#0b0207',
+      alwaysOnTop: true, hasShadow: false, fullscreenable: false, show: false, enableLargerThanScreen: true,
+      webPreferences: { contextIsolation: true, sandbox: true, javascript: false }
+    });
+    w.setContentProtection(true);
+    privacyWins.push(w);
+    w.setAlwaysOnTop(true, 'screen-saver');
+    w.setIgnoreMouseEvents(true);
+    w.setVisibleOnAllWorkspaces?.(true, { visibleOnFullScreen: true });
+    await w.loadURL(privacyPage(name, '#0b0207')).catch(() => {});
+    if (w.isDestroyed()) return { ok: false, error: 'Couldn’t show the privacy screen' };
+    w.showInactive(); w.setBounds(d.bounds);
+  }
+  await new Promise(r => setTimeout(r, 700));
+  const leaks = process.env.UNIDESK_TEST_COVER_LEAKS === '1' ? true : await coverLeaks();   // test hook: pretend this macOS captures it
+  if (leaks !== false) {
+    privacyOff(false);
+    return { ok: false, error: leaks ? 'This Mac’s screen sharing still shows the privacy screen to you, so UniDesk turned it off' : 'UniDesk couldn’t check that the privacy screen is hidden from you, so it stayed off' };
+  }
+  try { globalShortcut.register(PRIVACY_KEY, () => privacyOff(true)); } catch {}
+  return { ok: true, on: true };
+}
 ipcMain.handle('privacy', (_e, on, who) => {
   if (!on) { privacyOff(false); return { ok: true, on: false }; }
   if (privacyWins.length) return { ok: true, on: true };
-  if (process.platform !== 'win32') return { ok: false, error: 'The privacy screen is only available on Windows PCs for now' };
+  if (process.platform === 'darwin') return macPrivacyOn(who);
+  if (process.platform !== 'win32') return { ok: false, error: 'The privacy screen isn’t available on Linux: its screen sharing can’t leave a window out' };
   for (const d of eScreen.getAllDisplays()) {
     const w = new BrowserWindow({
       ...d.bounds, frame: false, resizable: false, movable: false, focusable: false, skipTaskbar: true, backgroundColor: '#000000',
@@ -448,8 +494,33 @@ ipcMain.handle('block-input', (_e, on) => {
 const SPI_GETDESKWALLPAPER = 0x73, SPI_SETDESKWALLPAPER = 0x14, SPIF_SENDCHANGE = 0x02;
 const wallFile = () => path.join(app.getPath('userData'), 'wallpaper-restore.json');
 let wallSaved = null;
+// Linux: GNOME-family desktops keep the wallpaper in gsettings; 'none' as picture-options shows the plain colour.
+const LINUX_OPTS = ['wallpaper', 'centered', 'scaled', 'stretched', 'zoom', 'spanned'];
+function linuxBgSchema() {
+  const de = String(process.env.XDG_CURRENT_DESKTOP || '').toLowerCase();
+  return de.includes('cinnamon') ? 'org.cinnamon.desktop.background' : de.includes('mate') ? 'org.mate.background' : 'org.gnome.desktop.background';
+}
+async function linuxWallOpts(schema) { const r = await run('gsettings', ['get', schema, 'picture-options']); return r.code === 0 ? r.out.trim().replace(/^'|'$/g, '') : null; }
+async function linuxWallHide() {
+  if (wallSaved !== null) return false;
+  const schema = linuxBgSchema(), cur = await linuxWallOpts(schema);
+  if (!cur || !LINUX_OPTS.includes(cur)) return false;   // no gsettings, unknown desktop, or already plain
+  fs.writeFileSync(wallFile(), JSON.stringify({ linux: schema, opts: cur }));
+  await run('gsettings', ['set', schema, 'picture-options', 'none']);
+  if ((await linuxWallOpts(schema)) !== 'none') { fs.rmSync(wallFile(), { force: true }); return false; }
+  wallSaved = cur; return true;
+}
+function linuxWallRestore() {
+  let saved = null; try { saved = JSON.parse(fs.readFileSync(wallFile(), 'utf8')); } catch {}
+  const schema = saved?.linux || linuxBgSchema(), opts = wallSaved ?? saved?.opts;
+  if (!opts || !LINUX_OPTS.includes(opts) || !/^org\.(gnome\.desktop\.background|cinnamon\.desktop\.background|mate\.background)$/.test(schema)) { wallSaved = null; return false; }
+  try { require('child_process').execFileSync('gsettings', ['set', schema, 'picture-options', opts], { timeout: 4000, stdio: 'ignore' }); } catch {}
+  wallSaved = null; try { fs.rmSync(wallFile(), { force: true }); } catch {}
+  return true;
+}
 function wallSet(p) { return user32().spi(SPI_SETDESKWALLPAPER, 0, Buffer.from(String(p) + '\0', 'utf16le'), SPIF_SENDCHANGE) !== 0; }
 ipcMain.handle('wallpaper-hide', () => {
+  if (process.platform === 'linux') return linuxWallHide().catch(() => false);
   if (process.platform !== 'win32' || wallSaved !== null) return false;
   try {
     const buf = Buffer.alloc(1040); user32().spi(SPI_GETDESKWALLPAPER, 520, buf, 0);
@@ -461,6 +532,7 @@ ipcMain.handle('wallpaper-hide', () => {
   } catch { return false; }
 });
 function wallRestore() {
+  if (process.platform === 'linux') return linuxWallRestore();
   if (process.platform !== 'win32') return false;
   let p = wallSaved;
   if (p === null) { try { p = JSON.parse(fs.readFileSync(wallFile(), 'utf8')).path; } catch { return false; } }  // left over from a crash

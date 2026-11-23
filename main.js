@@ -7,30 +7,13 @@ const crypto = require('crypto');
 // Optional separate profile (for testing two instances on one PC): UNIDESK_PROFILE=name
 if (process.env.UNIDESK_PROFILE) app.setPath('userData', path.join(app.getPath('appData'), 'UniDesk-' + process.env.UNIDESK_PROFILE.replace(/[^\w-]/g, '')));
 
-// Before sign-in (Windows): while nobody is signed in, the UniDesk service runs this app as SYSTEM with --presignin.
-// It has no window, uses this PC's address, accepts only the unattended password and shows the sign-in screen.
-// Its files live in %ProgramData%\UniDesk\presignin, which only SYSTEM and administrators can read.
-const PRESIGNIN = process.platform === 'win32' && process.argv.includes('--presignin');
-// (tests running from source can point it at another folder; the installed app always uses ProgramData)
-const PRE_DIR = !app.isPackaged && process.env.UNIDESK_PRE_DIR ? process.env.UNIDESK_PRE_DIR : path.join(process.env.ProgramData || 'C:\\ProgramData', 'UniDesk', 'presignin');
-if (PRESIGNIN) { app.setPath('userData', path.join(PRE_DIR, 'data')); app.disableHardwareAcceleration(); }
-function preLog(msg) {
-  if (!PRESIGNIN) return;
-  try {
-    const f = path.join(PRE_DIR, 'log.txt');
-    if (fs.existsSync(f) && fs.statSync(f).size > 256 * 1024) fs.renameSync(f, f + '.old');
-    fs.appendFileSync(f, new Date().toISOString() + '  ' + String(msg).slice(0, 500) + '\n');
-  } catch {}
-}
-if (PRESIGNIN) { preLog('starting (pid ' + process.pid + ')'); process.on('uncaughtException', (e) => preLog('error: ' + (e && e.stack || e))); }
-
 // Single instance: a second launch just focuses the running app
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 app.on('second-instance', (_e, argv) => { showWin(); handleLink(argv.find(a => a.startsWith('unidesk://'))); });
 
 // ---------- Invite links: unidesk://connect/123456789 ----------
 // Registered only for the installed app, so running from source never touches the registry.
-if (app.isPackaged && !PRESIGNIN) app.setAsDefaultProtocolClient('unidesk');
+if (app.isPackaged) app.setAsDefaultProtocolClient('unidesk');
 let pendingLink = process.argv.find(a => a.startsWith('unidesk://')) || null;
 function parseLink(url) { const m = /^unidesk:\/\/(?:connect\/)?(\d{9})/i.exec(String(url || '').replace(/\s/g, '')); return m ? m[1] : null; }
 function handleLink(url) {
@@ -210,7 +193,6 @@ ipcMain.handle('wol', async (_e, mac) => {
   sock.close(); return true;
 });
 
-ipcMain.handle('lan-info', () => ({ port: lan?.port || null, ips: lanAddrs().map(a => a.address) }));
 
 // ---------- Windows: administrator + Secure Desktop service (lock screen, UAC, Ctrl+Alt+Del) ----------
 const POLICY_KEY = 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System';
@@ -316,7 +298,7 @@ async function secureTick() {
   try {
     if (s.agent.closed) return secureStop();
     const d = await s.agent.cmd('DESK'); const desk = (d || '').slice(3);
-    const isSecure = !!desk && (PRESIGNIN || desk.toLowerCase() !== 'default');
+    const isSecure = !!desk && desk.toLowerCase() !== 'default';
     if (isSecure) {
       const f = await s.agent.cmd('FRAME 1600 55', true);
       if (f && f.body) s.sender?.send('secure-frame', { desk, jpeg: f.body.toString('base64') });
@@ -554,48 +536,7 @@ ipcMain.on('tab-state', (e, s) => {
   const [, t] = hit; t.title = String(s?.title || 'New tab').slice(0, 60); t.live = !!s?.live; sendTabs();
 });
 
-// ---------- Before sign-in (Windows) ----------
-const readPreConfig = () => { try { return JSON.parse(fs.readFileSync(path.join(PRE_DIR, 'config.json'), 'utf8')); } catch { return null; } };
-function createPreWindow() {
-  const cfg = readPreConfig();
-  if (!cfg || !/^\d{9}$/.test(String(cfg.id)) || !cfg.auth?.key) { preLog('not set up (no config or no password): exiting'); app.exit(0); return; }
-  // the unattended-password check reads unattended.json from userData: give this instance the owner's verifier
-  fs.mkdirSync(app.getPath('userData'), { recursive: true });
-  fs.writeFileSync(path.join(app.getPath('userData'), 'unattended.json'), JSON.stringify(cfg.auth));
-  win = new BrowserWindow({ width: 1280, height: 720, show: false, webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
-  win.webContents.on('console-message', (_e, level, message) => { if (level >= 2) preLog('page: ' + message); });
-  win.webContents.on('render-process-gone', (_e, d) => { preLog('page crashed: ' + d.reason); app.exit(1); });
-  win.loadFile('index.html', { query: { presignin: '1' } });
-  preLog('window loaded for ' + cfg.id);
-}
-ipcMain.handle('pre-config', () => { if (!PRESIGNIN) return null; const c = readPreConfig(); if (c) delete c.auth; return c; });
-ipcMain.handle('pre-state', async () => { try { const r = await serviceCmd('PRESTATE'); return r && r.startsWith('OK ') ? r.slice(3) : null; } catch { return null; } });
-ipcMain.on('pre-log', (_e, m) => preLog(m));
-ipcMain.on('pre-quit', () => { if (PRESIGNIN) { preLog('handing over: someone signed in'); setTimeout(() => app.exit(0), 200); } });
-// The signed-in app turns it on or off (needs administrator; UniDesk always runs as one on Windows).
-ipcMain.handle('presignin-set', async (_e, on, cfg) => {
-  if (process.platform !== 'win32' || PRESIGNIN) return { ok: false, error: 'Only on Windows' };
-  if (!(await isAdmin())) return { ok: false, error: 'UniDesk needs to run as administrator for this' };
-  const launch = path.join(PRE_DIR, 'launch.txt'), conf = path.join(PRE_DIR, 'config.json');
-  if (!on) {
-    for (const f of [launch, conf]) { try { fs.rmSync(f, { force: true }); } catch {} }
-    try { await serviceCmd('PRESTOP'); } catch {}
-    return { ok: true, on: false };
-  }
-  const auth = readAuth(); if (!auth) return { ok: false, error: 'Set an unattended access password first' };
-  if ((await serviceState()) !== 'running') { const r = await ensureService(); if (!r.ok) return { ok: false, error: r.reason === 'no-helper' ? 'The UniDesk service is missing from this copy' : 'Couldn’t start the UniDesk service' }; }
-  if ((await serviceState()) !== 'running') return { ok: false, error: 'Couldn’t start the UniDesk service' };
-  fs.mkdirSync(PRE_DIR, { recursive: true });   // inherits the service folder's SYSTEM + administrators only access
-  const c = { id: String(cfg?.id || ''), net: cfg?.net || null, allowOnly: !!cfg?.allowOnly, allowIds: String(cfg?.allowIds || ''), idleMins: String(cfg?.idleMins || '0'), maxMins: String(cfg?.maxMins || '0'), auth };
-  if (!/^\d{9}$/.test(c.id)) return { ok: false, error: 'No address yet' };
-  fs.writeFileSync(conf, JSON.stringify(c));
-  const args = app.isPackaged ? '' : `"${path.resolve(process.argv[1] || '.')}"`;   // running from source: electron.exe + the app folder
-  fs.writeFileSync(launch, process.execPath + '\r\n' + args + (process.env.UNIDESK_PRE_EXTRA ? ' ' + process.env.UNIDESK_PRE_EXTRA : '') + '\r\n');
-  return { ok: true, on: true };
-});
-
 app.whenReady().then(() => {
-  if (PRESIGNIN) { createPreWindow(); return; }
   createWindow(); createTray();
   win.on('resize', layoutTabs);
   for (const ev of ['maximize', 'unmaximize', 'restore', 'enter-full-screen']) win.on(ev, layoutSoon);
@@ -1010,14 +951,6 @@ ipcMain.on('active-display', (_e, displayId) => {
   const all = eScreen.getAllDisplays();
   const d = all.find(x => String(x.id) === String(displayId)) || eScreen.getPrimaryDisplay();
   activeDisplay = physBounds(d);
-});
-
-ipcMain.handle('confirm', async (_e, msg) => {
-  win.show(); win.focus();
-  const r = await dialog.showMessageBox(win, {
-    type: 'question', buttons: ['Accept', 'Decline'], defaultId: 1, cancelId: 1, title: 'UniDesk', message: msg
-  });
-  return r.response === 0;
 });
 
 // ---------- Clipboard ----------

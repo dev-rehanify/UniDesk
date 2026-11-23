@@ -129,9 +129,7 @@ npm start
 ## Roadmap
 
 - [x] Custom signaling + TURN relay settings
-- [ ] Code-signed installer
 - [x] Windows system service (lock screen, UAC, Ctrl+Alt+Del)
-- [ ] Connect before anyone signs in (after a reboot)
 - [x] macOS builds (via GitHub Actions)
 - [x] Linux builds (AppImage)
 - [x] Mobile viewer (in the browser)

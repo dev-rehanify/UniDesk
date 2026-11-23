@@ -9,7 +9,7 @@
 // Security: both listeners bind to 127.0.0.1 only and require a random token. The service token is stored in
 // %ProgramData%\UniDesk\service.token with an ACL that only SYSTEM and Administrators can read.
 // Compile (C# 5 / .NET Framework 4, built into Windows):
-//   csc /nologo /platform:x64 /target:exe /out:UniDeskHelper.exe /r:System.ServiceProcess.dll /r:System.Drawing.dll /r:System.Management.dll UniDeskHelper.cs
+//   csc /nologo /platform:x64 /target:exe /out:UniDeskHelper.exe /r:System.ServiceProcess.dll /r:System.Drawing.dll UniDeskHelper.cs
 
 using System;
 using System.Collections.Generic;
@@ -42,9 +42,6 @@ namespace UniDesk
         [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
         [DllImport("sas.dll")] public static extern void SendSAS(bool asUser);
         [DllImport("kernel32.dll")] public static extern uint WTSGetActiveConsoleSessionId();
-        [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public static extern bool WTSQuerySessionInformation(IntPtr server, uint session, int infoClass, out IntPtr buffer, out int bytes);
-        [DllImport("wtsapi32.dll")] public static extern void WTSFreeMemory(IntPtr memory);
         [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
         [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
         [DllImport("advapi32.dll", SetLastError = true)] public static extern bool OpenProcessToken(IntPtr proc, uint access, out IntPtr token);
@@ -126,100 +123,11 @@ namespace UniDesk
             listener = new TcpListener(IPAddress.Loopback, PORT);
             listener.Start();
             Thread t = new Thread(Accept); t.IsBackground = true; t.Start();
-            Thread m = new Thread(PresigninLoop); m.IsBackground = true; m.Start();
         }
         protected override void OnStop()
         {
-            stopping = true;
             try { listener.Stop(); } catch { }
             KillAgent();
-            StopPresignin();
-        }
-
-        // ---------------- Reachable before sign-in ----------------
-        // When the UniDesk app turns this on (as administrator) it writes presignin\launch.txt: line 1 the UniDesk
-        // program, line 2 its arguments. While nobody is signed in at the console, we keep that program running here
-        // (as SYSTEM, in the service session, no window). It streams the sign-in screen through the agent below and
-        // accepts only the unattended-access password. As soon as someone signs in it hands over and exits.
-        volatile bool stopping, forced; Process pre; readonly object preLock = new object();
-        DateTime userSince = DateTime.MinValue; int quickExits; DateTime preStarted, backoffUntil = DateTime.MinValue;
-        static string PreDir { get { return Path.Combine(Dir, "presignin"); } }
-
-        // name of the user signed in at the console, or "" when the sign-in screen is showing
-        public static string ConsoleUser()
-        {
-            uint session = N.WTSGetActiveConsoleSessionId();
-            if (session == 0xFFFFFFFF) return "";
-            IntPtr buf; int bytes;
-            if (!N.WTSQuerySessionInformation(IntPtr.Zero, session, 5 /* WTSUserName */, out buf, out bytes)) return "";
-            try { return Marshal.PtrToStringUni(buf) ?? ""; } finally { N.WTSFreeMemory(buf); }
-        }
-        bool PreRunning() { lock (preLock) { try { return pre != null && !pre.HasExited; } catch { return false; } } }
-
-        void PresigninLoop()
-        {
-            while (!stopping)
-            {
-                try
-                {
-                    string launch = Path.Combine(PreDir, "launch.txt");
-                    if (!File.Exists(launch)) { StopPresignin(); userSince = DateTime.MinValue; forced = false; }
-                    else if (forced) { }
-                    else if (ConsoleUser() != "")
-                    {
-                        // the instance exits by itself when it notices the sign-in; make sure of it after a short grace
-                        if (userSince == DateTime.MinValue) userSince = DateTime.UtcNow;
-                        if ((DateTime.UtcNow - userSince).TotalSeconds > 20) StopPresignin();
-                    }
-                    else
-                    {
-                        userSince = DateTime.MinValue;
-                        if (!PreRunning() && DateTime.UtcNow > backoffUntil) StartPresignin(launch);
-                    }
-                }
-                catch { }
-                Thread.Sleep(4000);
-            }
-        }
-
-        string StartPresignin(string launch)
-        {
-            lock (preLock)
-            {
-                try
-                {
-                    if (pre != null && !pre.HasExited) return "OK running";
-                    if (pre != null && (DateTime.UtcNow - preStarted).TotalSeconds < 60) { if (++quickExits >= 3) { backoffUntil = DateTime.UtcNow.AddMinutes(5); quickExits = 0; return "ERR crashing"; } }
-                    else quickExits = 0;
-                    string[] l = File.ReadAllLines(launch);
-                    if (l.Length < 1 || !File.Exists(l[0].Trim())) return "ERR missing";
-                    ProcessStartInfo si = new ProcessStartInfo(l[0].Trim(), (l.Length > 1 ? l[1].Trim() + " " : "") + "--presignin");
-                    si.UseShellExecute = false; si.CreateNoWindow = true; si.WorkingDirectory = Path.GetDirectoryName(l[0].Trim());
-                    pre = Process.Start(si); preStarted = DateTime.UtcNow;
-                    return "OK started";
-                }
-                catch (Exception e) { return "ERR " + e.Message; }
-            }
-        }
-        void StopPresignin()
-        {
-            lock (preLock)
-            {
-                try { if (pre != null && !pre.HasExited) { foreach (Process p in ChildrenOf(pre.Id)) try { p.Kill(); } catch { } pre.Kill(); } } catch { }
-                pre = null;
-            }
-        }
-        // Electron starts helper processes; end them too
-        static List<Process> ChildrenOf(int pid)
-        {
-            List<Process> list = new List<Process>();
-            try
-            {
-                using (System.Management.ManagementObjectSearcher q = new System.Management.ManagementObjectSearcher("SELECT ProcessId FROM Win32_Process WHERE ParentProcessId=" + pid))
-                    foreach (System.Management.ManagementObject o in q.Get()) try { list.Add(Process.GetProcessById(Convert.ToInt32(o["ProcessId"]))); } catch { }
-            }
-            catch { }
-            return list;
         }
 
         // token file readable only by SYSTEM + Administrators
@@ -261,13 +169,6 @@ namespace UniDesk
                         else if (cmd == "SAS") { N.SendSAS(false); Util.Write(s, "OK"); }
                         else if (cmd == "AGENT") Util.Write(s, StartAgent());
                         else if (cmd == "STOPAGENT") { KillAgent(); Util.Write(s, "OK"); }
-                        else if (cmd == "USER") { string u = ConsoleUser(); Util.Write(s, "OK " + (u == "" ? "-" : u)); }
-                        // start / stop the before-sign-in instance now (used by tests; it otherwise follows the sign-in state)
-                        // the before-sign-in instance asks this to know when to hand over: none = sign-in screen, user = someone signed in
-                        else if (cmd == "PRESTATE") Util.Write(s, "OK " + (forced ? "test" : ConsoleUser() == "" ? "none" : "user"));
-                        // test hooks (administrators only, like every command here): run the instance even while signed in
-                        else if (cmd == "PRESTART") { forced = true; Util.Write(s, File.Exists(Path.Combine(PreDir, "launch.txt")) ? StartPresignin(Path.Combine(PreDir, "launch.txt")) : "ERR off"); }
-                        else if (cmd == "PRESTOP") { forced = false; StopPresignin(); Util.Write(s, "OK"); }
                         else Util.Write(s, "ERR unknown");
                     }
                 }

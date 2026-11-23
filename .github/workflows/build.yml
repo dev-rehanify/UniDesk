@@ -49,7 +49,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /platform:x64 /target:exe /optimize+ /out:native\UniDeskHelper.exe /r:System.ServiceProcess.dll /r:System.Drawing.dll /r:System.Management.dll native\UniDeskHelper.cs
+          & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /platform:x64 /target:exe /optimize+ /out:native\UniDeskHelper.exe /r:System.ServiceProcess.dll /r:System.Drawing.dll native\UniDeskHelper.cs
           if (!(Test-Path native\UniDeskHelper.exe)) { throw 'helper build failed' }
       - name: Build
         run: ${{ matrix.cmd }}

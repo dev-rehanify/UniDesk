@@ -691,12 +691,12 @@ html.mac .aurora { background: var(--bg); }
 .tab-strip { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1 1 auto; margin: 0 12px; overflow-x: auto; scrollbar-width: none; -webkit-app-region: no-drag; }
 .tab-strip::-webkit-scrollbar { display: none; }
 .tab-strip[hidden] { display: none; }
-.tab { display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 11px; border-radius: 9px; max-width: 190px; min-width: 0; flex: 0 1 auto; cursor: pointer; font-size: 12.5px; color: var(--mute); border: 1px solid transparent; transition: background .15s, color .15s, border-color .15s; white-space: nowrap; }
+.tab { display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 11px; border-radius: 9px; max-width: 190px; min-width: 92px; flex: 0 1 auto; cursor: pointer; font-size: 12.5px; color: var(--mute); border: 1px solid transparent; transition: background .15s, color .15s, border-color .15s; white-space: nowrap; }
 .tab:hover { background: var(--hover-bg); color: inherit; }
 .tab.on { background: var(--chip-bg); border-color: var(--stroke-2); color: inherit; font-weight: 600; }
 .tab-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tab-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--stroke-2); }
-.tab.live .tab-dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(46,229,157,.18); }
+.tab.is-live .tab-dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(46,229,157,.18); }
 .tab-x { flex: none; width: 20px; height: 20px; border: 0; border-radius: 6px; background: none; color: inherit; cursor: pointer; font-size: 10px; opacity: .55; display: grid; place-items: center; }
 .tab-x:hover { opacity: 1; background: var(--hover-bg); }
 .tab-add { flex: none; width: 30px; height: 30px; border-radius: 9px; border: 1px dashed var(--stroke-2); background: none; color: var(--mute); cursor: pointer; font-size: 17px; line-height: 1; }

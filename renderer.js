@@ -13,6 +13,13 @@ function mapKey(code) {
   return code;
 }
 const PREFIX = 'unidesk-';
+// Session tabs: an extra tab is this same page opened with ?tab=N (and ?target=ID to connect at once).
+const TAB = new URLSearchParams(location.search).get('tab');
+const TAB_TARGET = new URLSearchParams(location.search).get('target');
+if (TAB) document.documentElement.classList.add('tab-mode');
+// The other PC sees a tab as your address plus "-xxxx"; strip that to get the address.
+let selfPeerId = '';
+const basePeer = (p) => String(p || '').replace(PREFIX, '').replace(/-.*$/, '');
 const fmt = (id) => String(id).replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
 const ICE = { iceServers: [
   { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
@@ -30,7 +37,7 @@ let screens = [], curScreen = 0, remoteScreens = [], connectTimer = null;
 
 // ================= SETTINGS & THEME =================
 const DEFAULTS = { theme: 'system', accent: 'violet', calm: false, quality: 'balanced', clip: true, stats: true, autoFull: false,
-  audio: true, allowControl: true, allowFiles: true, allowClip: true, allowTerminal: false, unattended: false, otp: false, allowBrowse: false, tray: true, startup: false, lockOnEnd: 'never', idleMins: '0', maxMins: '0', lan: true, allowOnly: false, allowIds: '', hideWall: true, recIncoming: false, recKeep: '30' };
+  audio: true, allowControl: true, allowFiles: true, allowClip: true, unattended: false, otp: false, allowBrowse: false, tray: true, startup: false, lockOnEnd: 'never', idleMins: '0', maxMins: '0', lan: true, allowOnly: false, allowIds: '', hideWall: true, recIncoming: false, recKeep: '30' };
 const ACCENTS = {
   violet: ['#5b8cff', '#a26bff'], ocean: ['#2f9bff', '#22d3c5'], sunset: ['#ff6a5b', '#ffb347'],
   emerald: ['#1fcf8f', '#3aa0ff'], rose: ['#ff4f8b', '#b36bff'], mono: ['#7b86a8', '#aab3d6']
@@ -65,10 +72,10 @@ function applyAll(animate) {
 }
 // allow-list: 9-digit addresses, one per line
 const allowedIds = () => new Set(String(S.allowIds || '').split(/[\n,;]+/).map(s => s.replace(/\D/g, '')).filter(s => s.length === 9));
-const isAllowed = (peerId) => !S.allowOnly || allowedIds().has(String(peerId).replace(PREFIX, ''));
+const isAllowed = (peerId) => !S.allowOnly || allowedIds().has(basePeer(peerId));
 function setSetting(k, v) {
   S[k] = v; saveSettings(); applyAll(k === 'theme');
-  if (role === 'host' && ['allowControl', 'allowFiles', 'allowClip', 'allowTerminal', 'allowBrowse'].includes(k)) { P = { ...P, [{ allowControl: 'control', allowFiles: 'files', allowClip: 'clip', allowTerminal: 'terminal', allowBrowse: 'browse' }[k]]: !!v }; sendPerms(); if (k === 'allowTerminal' && !v) window.dw.termStop(); }
+  if (role === 'host' && ['allowControl', 'allowFiles', 'allowClip', 'allowBrowse'].includes(k)) { P = { ...P, [{ allowControl: 'control', allowFiles: 'files', allowClip: 'clip', allowBrowse: 'browse' }[k]]: !!v }; sendPerms(); }
 }
 
 // swatches
@@ -124,12 +131,9 @@ $('newIdBtn').onclick = () => {
 applyAll(false);
 
 // per-session permissions (chosen on the request card; unattended sessions use the defaults from Settings)
-let P = { control: true, files: true, clip: true, terminal: false, browse: false };
-const defaultPerms = () => ({ control: !!S.allowControl, files: !!S.allowFiles, clip: !!S.allowClip, terminal: !!S.allowTerminal, browse: !!S.allowBrowse });
+let P = { control: true, files: true, clip: true, browse: false };
+const defaultPerms = () => ({ control: !!S.allowControl, files: !!S.allowFiles, clip: !!S.allowClip, browse: !!S.allowBrowse });
 function sendPerms() {
-  // taking control away also lifts the privacy screen
-  if (!P.control && hostPrivacy) { hostPrivacy = false; window.dw.privacy(false); send({ t: 'privacy-r', on: false }); }
-  if (!P.control && hostBlock) unblockHost();
   repPerms();
   send({ t: 'perms', ...P });
 }
@@ -180,11 +184,12 @@ function storedId() {
 async function boot() {
   await loadPeer();
   myId = storedId();
-  peer = new Peer(PREFIX + myId, await peerOptions());
+  selfPeerId = PREFIX + myId + (TAB ? '-' + Math.random().toString(36).slice(2, 6) : '');
+  peer = new Peer(selfPeerId, await peerOptions());
   peer.on('open', () => { renderId(myId); setStatus('Online · ready', true); });
   peer.on('disconnected', () => { setStatus('Reconnecting…'); setTimeout(() => !peer.destroyed && peer.reconnect(), 1500); });
   peer.on('error', (e) => {
-    if (e.type === 'unavailable-id') { try { localStorage.removeItem('dw-id'); } catch {} location.reload(); return; }
+    if (e.type === 'unavailable-id') { if (!TAB) { try { localStorage.removeItem('dw-id'); } catch {} } location.reload(); return; }
     if (e.type === 'peer-unavailable') { failConnect('Desk not found', 'That ID is offline or does not exist.'); return; }
     console.error(e); setStatus('Network: ' + e.type);
   });
@@ -196,15 +201,16 @@ async function boot() {
 // ================= HOST =================
 let pendingHost = null;
 async function onIncomingConn(c) {
+  if (TAB) { c.on('open', () => { c.send({ t: 'busy' }); setTimeout(() => c.close(), 300); }); return; }   // tabs only connect out
   if (!isAllowed(c.peer)) { // not on the allow-list: turn away without asking
     c.on('open', () => { c.send({ t: 'blocked' }); setTimeout(() => c.close(), 300); });
-    logHistory({ dir: 'in', id: fmt(c.peer.replace(PREFIX, '')), how: 'blocked' }); return;
+    logHistory({ dir: 'in', id: fmt(basePeer(c.peer)), how: 'blocked' }); return;
   }
   if (role || pendingHost || hostRebooting) { c.on('open', () => { c.send({ t: 'busy' }); setTimeout(() => c.close(), 300); }); return; }
   pendingHost = c;
   c.on('close', () => { if (pendingHost === c) pendingHost = null; });
   c.on('open', async () => {
-    const who = fmt(c.peer.replace(PREFIX, ''));
+    const who = fmt(basePeer(c.peer));
     let asked = false, settled = false;
     let vname = '';
     const finish = (ok, how, perms) => {
@@ -419,7 +425,7 @@ function onIncomingCall(c) {
     $('quality').value = S.quality; send({ t: 'quality', q: S.quality }); $('clipSync').checked = !!S.clip;
     setTimeout(() => {
       overlay(null); showView('session'); v.classList.add('playing'); $('stage').focus(); revealToolbar();
-      if (S.autoFull && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+      if (S.autoFull && !isFull()) setFull(true);
     }, 650);
     startStats(); startClipSync();
     try { c.peerConnection.getReceivers().forEach(r => { if ('playoutDelayHint' in r) r.playoutDelayHint = 0; if ('jitterBufferTarget' in r) r.jitterBufferTarget = 0; }); } catch {}
@@ -432,7 +438,6 @@ let lastClip = null;
 function wireData(c) {
   const parts = new Map();
   c.on('data', (raw) => {
-    lastRx = Date.now();
     // reassemble messages that send() split into pieces (the data channel drops messages of 16 KB or more)
     let m = raw;
     if (raw && raw.t === '_c') {
@@ -492,34 +497,22 @@ function wireData(c) {
         $('ctrlBtn').innerHTML = m.control ? '<svg class="ic"><use href="#i-mouse"/></svg><span>Control</span>' : '<svg class="ic"><use href="#i-mouse"/></svg><span>Request control</span>';
         $('ctrlBtn').classList.toggle('on', !m.control);
         $('fileBtn').disabled = !m.files; $('fileBtn').style.opacity = m.files ? '' : '.4';
-        $('termBtn').style.display = m.terminal ? '' : 'none';
         $('browseBtn').style.display = m.browse ? '' : 'none'; if (!m.browse) toggleBrowse(false);
         $('tmBtn').style.display = m.control ? '' : 'none'; if (!m.control) toggleTm(false);
-        $('privBtn').style.display = m.control ? '' : 'none'; if (!m.control) setPrivBtn(false);
-        $('blockBtn').style.display = m.control ? '' : 'none'; if (!m.control) setBlockBtn(false);
         $('piBtn').style.display = m.control ? '' : 'none'; if (!m.control) togglePi(false);
         fbButtons();
-        if (!m.terminal) toggleTerm(false);
-        if (m.terminal && !was.terminal) toast('Partner allowed the remote terminal', 2200);
         break;
       }
       case 'monitor': if (role === 'host') switchMonitor(m.i); break;
       case 'quality': if (role === 'host') tune(call.peerConnection, m.q); break;
-      case 'hb': break;
       case 'pi': if (role === 'host') onPiRequest(m); break;
       case 'pi-r': if (role === 'viewer') onFsReply(m); break;
       case 'rec-on': if (role === 'viewer') { $('recBadge').classList.add('show'); if (!m.again) toast('Your partner is recording this session', 3200); } break;
       case 'power': if (role === 'host') onPowerRequest(m); break;
       case 'power-r': if (role === 'viewer') onPowerReply(m); break;
-      case 'block': if (role === 'host') onBlockRequest(m); break;
-      case 'block-r': if (role === 'viewer') onBlockReply(m); break;
-      case 'privacy': if (role === 'host') onPrivacyRequest(m); break;
-      case 'privacy-r': if (role === 'viewer') onPrivacyReply(m); break;
       case 'file-start': if (role === 'host' && !P.files) break; if (role !== 'host' || !P.browse) delete m.dir; window.dw.fileStart(m); toast(`Receiving ${m.name}…`); repN('filesIn'); repN('bytesIn', +m.size || 0); repEv(`Sent you the file ${String(m.name).slice(0, 120)} (${fmtSize(+m.size || 0)})${m.dir ? ' into ' + String(m.dir).slice(0, 120) : ''}`); break;
       case 'file-chunk': if (role === 'host' && !P.files) break; window.dw.fileChunk(m); break;
       case 'file-end': if (role === 'host' && !P.files) break; window.dw.fileEnd(m); break;
-      case 'term-in': if (role === 'host' && P.terminal) { window.dw.termInput(String(m.d || '')); String(m.d || '').split('\n').map(s => s.trim()).filter(Boolean).forEach(s => repEv('Ran in the terminal: ' + s)); } break;
-      case 'term-out': if (role === 'viewer') termWrite(m.d); break;
       default: if (role === 'host' && P.control && !hostPaused) window.dw.input(m);
     }
   });
@@ -664,17 +657,13 @@ function endAll(opts = {}) {
   if (wasHost && sessRep) sessRep.why = repWhy || (byeReceived ? 'The visitor ended the session' : 'The connection closed');
   send({ t: 'bye' });
   clearInterval(idleTimer); hostHow = null;
-  if (wasHost) { window.dw.drawClose(); window.dw.secureStop(); window.dw.termStop(); window.dw.wallpaperRestore(); hostRecStop(); }
+  if (wasHost) { window.dw.drawClose(); window.dw.secureStop(); window.dw.wallpaperRestore(); hostRecStop(); }
   $('recBadge').classList.remove('show');
-  if (wasHost || hostBlock) { hostBlock = false; clearInterval(blockWatch); window.dw.blockInput(false); }
-  setBlockBtn(false); $('blockBtn').style.display = 'none'; clearInterval(hbTimer);
   togglePi(false); $('piBtn').style.display = 'none'; $('piBody').innerHTML = ''; toggleSn(false); clipHist = [];
-  if (wasHost || hostPrivacy) { hostPrivacy = false; window.dw.privacy(false); }
-  setPrivBtn(false); $('privBtn').style.display = 'none'; fbAskClose();
+  fbAskClose();
   hostPaused = false; $('pauseBtn').classList.remove('on'); $('pauseLabel').textContent = 'Pause'; setPausedView(false); toggleBrowse(false); $('browseBtn').style.display = 'none'; toggleTm(false);
   stopVoice(true); ctrlAsk = false; $('ctrlReq').classList.remove('show');
   if (!opts.silent) { stopSessionTimer(); sessStart = 0; }
-  toggleTerm(false); $('termOut').textContent = ''; $('termBtn').style.display = 'none';
   secureOff();
   setDrawMode(false); drawLayer.apply({ k: 'clear' });
   if (!opts.silent) { inSession = false; }
@@ -691,7 +680,7 @@ function endAll(opts = {}) {
   $('video').srcObject = null; $('video').classList.remove('playing', 'switching');
   $('hosting').classList.remove('show'); toggleChat(false); closePanel(); overlay(null);
   $('stats').textContent = '';
-  if (document.fullscreenElement && !opts.silent) document.exitFullscreen();
+  if (isFull() && !opts.silent) setFull(false);
   showView('home');
   if (wasViewer && !opts.silent && !opts.quiet) toast('Session ended');
   if (wasHost && (S.lockOnEnd === 'always' || (S.lockOnEnd === 'unattended' && how === 'unattended'))) {
@@ -756,7 +745,16 @@ const copyId = () => { if (!myId) return; navigator.clipboard.writeText(myId); t
 $('myId').onclick = copyId; $('copyBtn').onclick = copyId;
 $('cancelBtn').onclick = () => { stopRestartWait(); clearTimeout(connectTimer); try { conn?.close(); } catch {} conn = null; role = null; overlay(null); };
 $('endBtn').onclick = () => endAll(); $('stopHost').onclick = () => { repWhy = 'You ended the session'; endAll(); };
-$('fullBtn').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+// In a tab the page can't use the browser's fullscreen (it never completes inside an embedded view),
+// so the main process makes the window fullscreen and lets this tab fill it.
+const isFull = () => TAB ? document.body.classList.contains('fs') : !!document.fullscreenElement;
+function setFull(on) {
+  if (TAB) return window.dw.tabFullscreen(!!on);
+  if (on) document.documentElement.requestFullscreen().catch(() => {});
+  else if (document.fullscreenElement) document.exitFullscreen();
+}
+if (TAB) window.dw.onTabFs((on) => { document.body.classList.toggle('fs', !!on); revealToolbar(); });
+$('fullBtn').onclick = () => setFull(!isFull());
 document.addEventListener('fullscreenchange', () => { document.body.classList.toggle('fs', !!document.fullscreenElement); revealToolbar(); });
 $('ctrlBtn').onclick = () => {
   if (remotePerms.control === false) { send({ t: 'req-control' }); toast('Asked your partner for control', 2000); return; }
@@ -830,7 +828,7 @@ function loadRecents() {
       </div>`;
     el.querySelector('b').textContent = x.name || 'Unnamed desk';
     if (x.note) { el.querySelector('.desk-note').textContent = x.note.replace(/\s+/g, ' '); el.querySelector('.desk-main').title = 'Connect\n\n' + x.note; }
-    el.querySelector('.desk-main').onclick = () => connect(x.id);
+    el.querySelector('.desk-main').onclick = (e) => (e.ctrlKey || e.metaKey) && !TAB ? openTab(x.id) : connect(x.id);   // Ctrl/Cmd+click: open in a new tab
     const [star, ren, del] = el.querySelectorAll('.mini');
     const wk = el.querySelector('.wake'); if (wk) wk.onclick = (e) => { e.stopPropagation(); wakeDesk(x); };
     star.onclick = () => { const all = readDesks(); const t = all.find(y => y.id === x.id); t.fav = !t.fav; writeDesks(all); };
@@ -925,13 +923,13 @@ function renderHistory() {
   });
 }
 // ================= SESSION REPORT (host) =================
-// What a visitor did on this PC: files, file changes, terminal commands, ended programs, links, power.
+// What a visitor did on this PC: files, file changes, ended programs, links, power.
 // Stored only on this PC, with the session's history entry.
 let sessRep = null, repWhy = '';
 function repStart(who, how) { sessRep = { who, how, perms: { ...P }, ev: [], n: { chatIn: 0, chatOut: 0, clipIn: 0, clipOut: 0, filesIn: 0, filesOut: 0, bytesIn: 0, bytesOut: 0 }, lastP: null }; repWhy = ''; }
 function repEv(text) { if (role !== 'host' || !sessRep || !text) return; if (sessRep.ev.length < 300) sessRep.ev.push({ t: Date.now(), d: String(text).slice(0, 240) }); else sessRep.cut = true; }
 function repN(k, by = 1) { if (role === 'host' && sessRep) sessRep.n[k] += by; }
-const PERM_NAMES = { control: 'control', files: 'files', clip: 'clipboard', terminal: 'terminal', browse: 'file browsing' };
+const PERM_NAMES = { control: 'control', files: 'files', clip: 'clipboard', browse: 'file browsing' };
 function repPerms() {
   if (role !== 'host' || !sessRep) return;
   const was = sessRep.lastP; sessRep.lastP = { ...P };
@@ -956,7 +954,7 @@ function reportText(e) {
     `Clipboard: ${r.n.clipIn} copied to this PC, ${r.n.clipOut} copied from it`,
     `Chat: ${r.n.chatIn} messages received, ${r.n.chatOut} sent`,
     '',
-    r.ev.length ? 'What happened:' : 'No files, commands or other actions.',
+    r.ev.length ? 'What happened:' : 'No files or other actions.',
     ...r.ev.map(x => `  ${at(x.t)}  ${x.d}`),
   ];
   if (r.cut) lines.push('  (more actions were not recorded: the report keeps the first 300)');
@@ -972,7 +970,7 @@ function openReport(e) {
   $('repFacts').innerHTML = facts.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
   const at = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   $('repList').innerHTML = r.ev.length ? r.ev.map(x => `<li><time>${at(x.t)}</time><span>${esc(x.d)}</span></li>`).join('') + (r.cut ? '<li class="more"><span>More actions happened but only the first 300 are kept.</span></li>' : '')
-    : '<li class="none"><span>No files, commands or other actions in this session.</span></li>';
+    : '<li class="none"><span>No files or other actions in this session.</span></li>';
   $('repDialog').classList.add('show');
 }
 $('repClose').onclick = () => { $('repDialog').classList.remove('show'); repOpen = null; };
@@ -1030,7 +1028,7 @@ $('forgetSaved').onclick = async () => { await window.dw.pwForget(null); toast('
 refreshAuthUi();
 
 // main-process prefs (tray, startup) + tray integration
-const pushMainPrefs = () => window.dw.mainPrefs({ tray: !!S.tray, startup: !!S.startup });
+const pushMainPrefs = () => { if (!TAB) window.dw.mainPrefs({ tray: !!S.tray, startup: !!S.startup }); };
 pushMainPrefs();
 document.querySelectorAll('[data-set="tray"],[data-set="startup"]').forEach(i => i.addEventListener('change', pushMainPrefs));
 window.dw.onOpenSettings(() => openSettings('security'));
@@ -1194,7 +1192,7 @@ window.dw.onUpdateProgress((m) => {
     $('updAction').style.display = ''; $('updAction').textContent = 'Try again'; $('updAction').onclick = runForcedUpdate;
   }
 });
-setInterval(() => { if (!updating) checkUpdate(); }, 30 * 60e3);
+if (!TAB) setInterval(() => { if (!updating) checkUpdate(); }, 30 * 60e3);
 
 // ================= LAN MODE =================
 let viaLan = false, lanHostPeer = null; const nearbyMap = new Map(), lanClients = new Map();
@@ -1203,7 +1201,7 @@ function lanClientFor(d) {
   const key = `${d.ip}:${d.port}`;
   if (lanClients.has(key)) return lanClients.get(key);
   const pr = new Promise((res, rej) => {
-    const p = new Peer(PREFIX + myId, { host: d.ip, port: d.port, path: '/unidesk/', secure: false, config: { iceServers: [] }, debug: 0 });
+    const p = new Peer(selfPeerId, { host: d.ip, port: d.port, path: '/unidesk/', secure: false, config: { iceServers: [] }, debug: 0 });
     const t = setTimeout(() => { rej(new Error('timeout')); p.destroy(); lanClients.delete(key); }, 4000);
     p.on('open', () => { clearTimeout(t); res(p); });
     p.on('error', (e) => { clearTimeout(t); rej(e); p.destroy(); lanClients.delete(key); });
@@ -1327,6 +1325,7 @@ $('video').addEventListener('loadedmetadata', () => drawMode && placeDrawLayer()
 $('hostFile').onclick = () => $('filePick').click();
 
 boot().then(async () => {
+  if (TAB) { tabBoot(); return; }
   window.dw.myId(fmt(myId));
   if (await peerReady()) startLanHost(); else setTimeout(startLanHost, 3000);
   connectFromLink(await window.dw.takePendingLink());
@@ -1347,7 +1346,7 @@ function requestDialog(who, getName) {
     try { if (document.hidden) new Notification('UniDesk', { body: `${who} wants to connect to this computer` }); } catch {}
     $('reqWho').textContent = who; refreshRequestName(getName());
     $('reqControl').checked = !!S.allowControl; $('reqView').checked = !S.allowControl;
-    $('reqFiles').checked = !!S.allowFiles; $('reqClip').checked = !!S.allowClip; $('reqTerm').checked = false; $('reqBrowse').checked = false;
+    $('reqFiles').checked = !!S.allowFiles; $('reqClip').checked = !!S.allowClip; $('reqBrowse').checked = false;
     $('reqCard').classList.add('show');
     let left = 30; $('reqCount').textContent = left;
     clearInterval(reqTimer);
@@ -1359,35 +1358,8 @@ function requestDialog(who, getName) {
 function refreshRequestName(name) { $('reqName').textContent = name ? `from ${name}` : ''; }
 function answerRequest(perms) { const r = reqResolve; reqResolve = null; closeRequest(); if (r) r(perms); }
 function closeRequest() { clearInterval(reqTimer); $('reqCard').classList.remove('show'); }
-$('reqAccept').onclick = () => answerRequest({ control: $('reqControl').checked, files: $('reqFiles').checked, clip: $('reqClip').checked, terminal: $('reqTerm').checked, browse: $('reqBrowse').checked });
+$('reqAccept').onclick = () => answerRequest({ control: $('reqControl').checked, files: $('reqFiles').checked, clip: $('reqClip').checked, browse: $('reqBrowse').checked });
 $('reqDecline').onclick = () => answerRequest(null);
-$('reqTerm').addEventListener('change', (e) => { if (e.target.checked && !$('reqControl').checked) { $('reqControl').checked = true; } });
-$('reqView').addEventListener('change', () => { if ($('reqView').checked) $('reqTerm').checked = false; });
-
-// ================= REMOTE TERMINAL =================
-// Host: a shell runs as this user; output streams to the viewer. Viewer: simple console panel.
-window.dw.onTermOut((d) => { if (role === 'host' && P.terminal) send({ t: 'term-out', d }); });
-function termWrite(d) {
-  const out = $('termOut'); const atBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 8;
-  out.textContent += d; if (out.textContent.length > 200000) out.textContent = out.textContent.slice(-150000);
-  if (atBottom) out.scrollTop = out.scrollHeight;
-}
-function toggleTerm(force) {
-  const open = $('term').classList.toggle('open', force);
-  $('termBtn').classList.toggle('on', open);
-  if (open) setTimeout(() => $('termIn').focus(), 150); else if (role === 'viewer') $('stage').focus();
-}
-const termHist = []; let termHi = 0;
-$('termBtn').onclick = () => toggleTerm();
-$('termClose').onclick = () => toggleTerm(false);
-$('termClear').onclick = () => { $('termOut').textContent = ''; };
-$('termIn').addEventListener('keydown', (e) => {
-  e.stopPropagation();
-  if (e.key === 'Enter') { const v = $('termIn').value; termWrite('> ' + v + '\n'); send({ t: 'term-in', d: v + '\n' }); if (v) termHist.push(v); termHi = termHist.length; $('termIn').value = ''; }
-  else if (e.key === 'ArrowUp') { if (termHi > 0) $('termIn').value = termHist[--termHi]; e.preventDefault(); }
-  else if (e.key === 'ArrowDown') { termHi = Math.min(termHist.length, termHi + 1); $('termIn').value = termHist[termHi] || ''; e.preventDefault(); }
-  else if (e.key === 'Escape') toggleTerm(false);
-});
 
 // ================= SYSTEM KEYS IN FULLSCREEN =================
 document.addEventListener('fullscreenchange', async () => {
@@ -1495,6 +1467,7 @@ $('ctrlDeny').onclick = () => answerControl(false);
 // ================= ONE-TIME ACCESS CODE =================
 let otpCode = null;
 async function rotateCode() {
+  if (TAB) return;   // the one-time code belongs to the main window
   if (!S.otp) { otpCode = null; await window.dw.otpClear(); $('otpRow').style.display = 'none'; return; }
   otpCode = await window.dw.otpNew();
   $('otpRow').style.display = ''; $('otpCode').textContent = otpCode;
@@ -1511,7 +1484,7 @@ $('pauseBtn').onclick = () => {
   if (role !== 'host' || !call) return;
   hostPaused = !hostPaused;
   call.peerConnection.getSenders().forEach(s => { if (s.track?.kind === 'video') s.track.enabled = !hostPaused; });
-  window.dw.releaseAll(); if (hostPaused && hostBlock) unblockHost();
+  window.dw.releaseAll();
   send({ t: 'paused', on: hostPaused });
   $('pauseBtn').classList.toggle('on', hostPaused); $('pauseLabel').textContent = hostPaused ? 'Resume' : 'Pause';
   toast(hostPaused ? 'Sharing paused: your partner sees a paused screen and can’t control' : 'Sharing resumed', 2200);
@@ -1704,32 +1677,6 @@ function restartTick() {
 }
 function stopRestartWait() { restartWait = null; clearInterval(restartTimer); }
 
-// ================= PRIVACY SCREEN =================
-// The visitor blacks out the host's monitors; the host's capture still shows the real desktop.
-let hostPrivacy = false, privOn = false;
-function setPrivBtn(on) { privOn = on; $('privBtn').classList.toggle('on', on); $('privBtn').title = on ? 'Privacy screen is on: click to show their screen again' : 'Privacy screen: black out the remote monitor'; }
-$('privBtn').onclick = () => {
-  if (remotePerms.control === false) return toast('Remote control is off', 1600);
-  $('privBtn').disabled = true; send({ t: 'privacy', on: !privOn });
-  setTimeout(() => { $('privBtn').disabled = false; }, 4000);
-};
-async function onPrivacyRequest(m) {
-  const reply = (d) => send({ t: 'privacy-r', ...d });
-  if (m.on && (!P.control || hostPaused)) return reply({ on: false, error: 'Your partner hasn’t allowed control' });
-  const r = await window.dw.privacy(!!m.on, 'Your partner');
-  const wasPriv = hostPrivacy; hostPrivacy = !!(r.ok && r.on);
-  if (hostPrivacy !== wasPriv) repEv(hostPrivacy ? 'Turned on the privacy screen' : 'Turned off the privacy screen');
-  reply({ on: hostPrivacy, error: r.ok ? undefined : (r.error || 'The privacy screen isn’t available on that PC') });
-}
-function onPrivacyReply(m) {
-  $('privBtn').disabled = false;
-  if (m.error) { setPrivBtn(false); return toast(m.error, 2400); }
-  const was = privOn; setPrivBtn(!!m.on);
-  if (m.on && !was) toast('Privacy screen on: their monitor is black, you still see it', 2600);
-  else if (!m.on && was) toast(m.local ? 'Your partner turned the privacy screen off' : 'Privacy screen off', 2200);
-}
-window.dw.onPrivacyEnded(() => { if (!hostPrivacy) return; hostPrivacy = false; send({ t: 'privacy-r', on: false, local: true }); toast('Your screen is visible again', 2000); });
-
 // ================= ADDRESS BOOK SEARCH & BACKUP =================
 $('deskSearch').addEventListener('input', loadRecents);
 $('deskSearch').addEventListener('keydown', (e) => {
@@ -1910,7 +1857,73 @@ async function hostRecStop() {
   await r.done;
 }
 $('recInOpen').onclick = () => window.dw.recInOpen();
-setTimeout(() => { if (S.recKeep && S.recKeep !== '0') window.dw.recInPrune(S.recKeep); }, 8000);
+if (!TAB) setTimeout(() => { if (S.recKeep && S.recKeep !== '0') window.dw.recInPrune(S.recKeep); }, 8000);
+
+// ================= SESSION TABS =================
+// Main window: draws the tab strip. A tab: tells the main window its title and connects to ?target.
+async function openTab(target) {
+  const id = await window.dw.tabOpen(target || '');
+  if (!id) toast('You can have up to 8 extra tabs', 2200);
+}
+let tabsState = { active: 0, list: [] };
+function deskLabel(id) { const d = readDesks().find(x => x.id === id); return d?.name || fmt(id); }
+function homeTabTitle() {
+  if (role === 'viewer' && viewerTarget) return deskLabel(viewerTarget);
+  if (role === 'host') return 'Sharing this PC';
+  return 'Home';
+}
+function renderTabs() {
+  if (TAB) return;
+  const strip = $('tabStrip'), s = tabsState;
+  const show = s.list.length > 0 || role === 'viewer';
+  strip.hidden = !show; document.body.classList.toggle('has-tabs', show);
+  if (!show) return;
+  const live = role === 'viewer' || role === 'host';
+  const item = (id, title, isLive, closable) => {
+    const b = document.createElement('div'); b.className = 'tab' + (s.active === id ? ' on' : '') + (isLive ? ' live' : ''); b.dataset.id = id; b.title = title; b.setAttribute('role', 'tab');
+    b.innerHTML = '<span class="tab-dot"></span><span class="tab-t"></span>' + (closable ? '<button class="tab-x" title="Close tab" aria-label="Close tab">✕</button>' : '');
+    b.querySelector('.tab-t').textContent = title;
+    b.onclick = (e) => { if (e.target.closest('.tab-x')) return; window.dw.tabSelect(id); };
+    if (closable) b.querySelector('.tab-x').onclick = (e) => { e.stopPropagation(); closeTabAsk(id, isLive, title); };
+    b.onauxclick = (e) => { if (e.button === 1 && closable) closeTabAsk(id, isLive, title); };
+    return b;
+  };
+  strip.innerHTML = '';
+  strip.appendChild(item(0, homeTabTitle(), live, false));
+  for (const t of s.list) strip.appendChild(item(t.id, t.title, t.live, true));
+  const add = document.createElement('button'); add.className = 'tab-add'; add.title = 'New tab: connect to another PC'; add.textContent = '+';
+  add.onclick = () => openTab(''); strip.appendChild(add);
+}
+function closeTabAsk(id, isLive, title) {
+  if (isLive && !confirm(`End the session with ${title} and close the tab?`)) return;
+  window.dw.tabClose(id);
+}
+if (!TAB) {
+  window.dw.onTabs((s) => { tabsState = s; renderTabs(); });
+  setInterval(renderTabs, 1500);   // keeps the main tab's title in step with this window's own session
+  ['settingsBtn', 'themeBtn', 'updateBtn'].forEach(id => $(id).addEventListener('click', () => { if (tabsState.active) window.dw.tabSelect(0); }, true));
+}
+// A tab: report its title, connect to the requested desk, follow settings changed in the main window
+let lastTabState = '';
+function reportTabState() {
+  const live = !!(role === 'viewer' && $('session').classList.contains('active'));
+  const title = role === 'viewer' && viewerTarget ? (live ? deskLabel(viewerTarget) : 'Connecting ' + fmt(viewerTarget)) : 'New tab';
+  const st = JSON.stringify({ title, live });
+  if (st !== lastTabState) { lastTabState = st; window.dw.tabState({ title, live }); }
+}
+async function tabBoot() {
+  setInterval(reportTabState, 700); reportTabState();
+  const online = await peerReady(); setStatus(online ? 'Online · ready' : 'Offline', online);
+  if (TAB_TARGET && /^\d{9}$/.test(TAB_TARGET)) {
+    if (online) connect(TAB_TARGET);
+    else { $('remoteId').value = fmt(TAB_TARGET); toast('Not online yet: press Connect in a moment', 3000); }
+  } else setTimeout(() => $('remoteId').focus(), 300);
+}
+if (TAB) window.addEventListener('storage', (e) => {
+  if (e.key !== 'ud-settings') return;
+  try { S = { ...DEFAULTS, ...JSON.parse(e.newValue || '{}') }; } catch {}
+  applyAll(false);
+});
 
 // ================= SLEEP / SIGN OUT / SHUT DOWN =================
 async function onPowerRequest(m) {
@@ -1926,42 +1939,6 @@ async function onPowerRequest(m) {
 function onPowerReply(m) {
   if (m.error) return toast(m.error, 2600);
   toast({ sleep: 'The PC is going to sleep. Wake it from your address book with Wake-on-LAN.', signout: 'The user is being signed out', shutdown: 'The PC is shutting down' }[m.what] || 'Done', 4000);
-}
-
-// ================= BLOCK THEIR MOUSE & KEYBOARD =================
-// The visitor can lock out the host's physical input; the visitor's own input still works.
-// Safety: lifted when control is taken away, sharing is paused, the session ends, or the
-// visitor goes silent for 15 s. Ctrl+Alt+Del on the host always lifts it (Windows rule).
-let hostBlock = false, blockOn = false, lastRx = 0, hbTimer = null, blockWatch = null;
-function setBlockBtn(on) {
-  blockOn = on; $('blockBtn').classList.toggle('on', on);
-  $('blockBtn').title = on ? 'Their mouse & keyboard are blocked: click to give them back' : 'Block their mouse & keyboard';
-  clearInterval(hbTimer); if (on) hbTimer = setInterval(() => send({ t: 'hb' }), 4000);
-}
-$('blockBtn').onclick = () => {
-  if (remotePerms.control === false) return toast('Remote control is off', 1600);
-  $('blockBtn').disabled = true; send({ t: 'block', on: !blockOn });
-  setTimeout(() => { $('blockBtn').disabled = false; }, 4000);
-};
-function unblockHost(tell = true) {
-  hostBlock = false; clearInterval(blockWatch); window.dw.blockInput(false);
-  if (tell) send({ t: 'block-r', on: false, auto: true });
-}
-async function onBlockRequest(m) {
-  const reply = (d) => send({ t: 'block-r', ...d });
-  if (m.on && (!P.control || hostPaused)) return reply({ on: false, error: 'Your partner hasn’t allowed control' });
-  const r = await window.dw.blockInput(!!m.on);
-  const wasBlock = hostBlock; hostBlock = !!(r.ok && r.on); clearInterval(blockWatch);
-  if (hostBlock !== wasBlock) repEv(hostBlock ? 'Blocked your mouse and keyboard' : 'Gave your mouse and keyboard back');
-  if (hostBlock) { lastRx = Date.now(); blockWatch = setInterval(() => { if (hostBlock && Date.now() - lastRx > 15000) { unblockHost(false); toast('Your mouse and keyboard work again', 2400); } }, 2000); }
-  reply({ on: hostBlock, error: r.ok ? undefined : r.error });
-}
-function onBlockReply(m) {
-  $('blockBtn').disabled = false;
-  if (m.error) { setBlockBtn(false); return toast(m.error, 2600); }
-  const was = blockOn; setBlockBtn(!!m.on);
-  if (m.on && !was) toast('Their mouse and keyboard are blocked. Pressing Ctrl+Alt+Del there gives them back.', 3200);
-  else if (!m.on && was) toast(m.auto ? 'Their mouse and keyboard work again' : 'Unblocked their mouse and keyboard', 2200);
 }
 
 // ================= FILE MANAGER ACTIONS (viewer) =================

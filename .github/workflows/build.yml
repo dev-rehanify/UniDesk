@@ -55,7 +55,7 @@ jobs:
         run: ${{ matrix.cmd }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      - name: Test the packaged Mac app (starts, privacy screen hidden from capture)
+      - name: Test the packaged Mac app
         if: matrix.test == 'mac'
         run: node scripts/mac-e2e.mjs release/mac-arm64/UniDesk.app/Contents/MacOS/UniDesk
         timeout-minutes: 5

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, dialog, clipboard, screen: eScreen, shell, nativeTheme, Tray, Menu, safeStorage, nativeImage, systemPreferences, globalShortcut } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, desktopCapturer, dialog, clipboard, screen: eScreen, shell, nativeTheme, Tray, Menu, safeStorage, nativeImage, systemPreferences, globalShortcut } = require('electron');
 const IS_MAC = process.platform === 'darwin';
 const path = require('path');
 const fs = require('fs');
@@ -140,7 +140,7 @@ async function startLan(id, name) {
     }
     sock.send(msg, BEACON_PORT, '127.0.0.1', () => {}); // lets two copies on one PC see each other
     for (const [k, v] of lanPeers) if (Date.now() - v.seen > 10000) lanPeers.delete(k);
-    win?.webContents.send('lan-peers', [...lanPeers.values()]);
+    for (const w of allPages()) w.send('lan-peers', [...lanPeers.values()]);
   };
   lan = { id, port, server, sock, timer: setInterval(beacon, 2500) };
   setTimeout(beacon, 300);
@@ -193,22 +193,6 @@ ipcMain.handle('wol', async (_e, mac) => {
   sock.close(); return true;
 });
 
-// ---------- Remote terminal (host): a shell running as this user, opt-in per session ----------
-let term = null;
-function termStart(sender) {
-  if (term) return;
-  const shell = process.platform === 'win32'
-    ? spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '-'], { cwd: os0.homedir(), windowsHide: true })
-    : spawn(process.env.SHELL || (IS_MAC ? '/bin/zsh' : '/bin/bash'), ['-s'], { cwd: os0.homedir() });
-  term = { p: shell, sender };
-  const out = (d) => { try { sender.send('term-out', d.toString()); } catch {} };
-  shell.stdout.on('data', out); shell.stderr.on('data', out);
-  shell.on('exit', (code) => { out(`\n[shell exited${code != null ? ' with code ' + code : ''}]\n`); term = null; });
-  if (process.platform === 'win32') shell.stdin.write('[Console]::OutputEncoding=[Text.Encoding]::UTF8; "UniDesk remote terminal: PowerShell on $env:COMPUTERNAME as $env:USERNAME"\n');
-  else shell.stdin.write('echo "UniDesk remote terminal: $SHELL on $(hostname) as $(whoami)"\n');
-}
-ipcMain.on('term-input', (e, d) => { if (!term) termStart(e.sender); try { term.p.stdin.write(String(d).slice(0, 8192)); } catch {} });
-ipcMain.on('term-stop', () => { if (term) { try { term.p.kill(); } catch {} term = null; } });
 ipcMain.handle('lan-info', () => ({ port: lan?.port || null, ips: lanAddrs().map(a => a.address) }));
 
 // ---------- Windows: administrator + Secure Desktop service (lock screen, UAC, Ctrl+Alt+Del) ----------
@@ -371,124 +355,17 @@ function ensureOverlay() {
 ipcMain.on('draw', (_e, m) => { const o = ensureOverlay(); if (o.webContents.isLoading()) o.webContents.once('did-finish-load', () => o.webContents.send('draw', m)); else o.webContents.send('draw', m); });
 ipcMain.on('draw-close', () => { if (overlayWin && !overlayWin.isDestroyed()) overlayWin.destroy(); overlayWin = null; });
 
-// ---------- Privacy screen (host side) ----------
-// A black, click-through window on every monitor that is excluded from screen capture,
-// so the person at this PC sees black while the visitor still sees the real desktop.
-let privacyWins = [];
-const PRIVACY_KEY = 'CommandOrControl+Alt+Shift+P';
-const MAC_KEYS = '<kbd>⌘ Command</kbd> + <kbd>⌥ Option</kbd> + <kbd>⇧ Shift</kbd> + <kbd>P</kbd>';
-const privacyPage = (who, bg = '#000') => 'data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:${bg};color:#8a8fa3;font:15px/1.6 "Segoe UI",system-ui,sans-serif;cursor:none;user-select:none}div{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}b{color:#e9ebf5;font-size:22px;font-weight:600}kbd{font:12px ui-monospace,monospace;border:1px solid #333;border-radius:6px;padding:2px 7px;color:#c9ccd9}</style><div><b>This screen is hidden</b><span>${who} is working on this PC with UniDesk.</span><span>Press ${process.platform === 'darwin' ? MAC_KEYS : '<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd>'} to show it again.</span></div>`);
-function privacyOff(notify = true) {
-  const was = privacyWins.length > 0;
-  privacyWins.forEach(w => { if (!w.isDestroyed()) w.destroy(); }); privacyWins = [];
-  try { globalShortcut.unregister(PRIVACY_KEY); } catch {}
-  if (was && notify && win && !win.isDestroyed()) win.webContents.send('privacy-ended');
-  return was;
-}
-// Electron's setContentProtection only blacks a window out in captures; WDA_EXCLUDEFROMCAPTURE
-// (Windows 10 2004+) leaves it out completely, so the capture shows what's underneath.
-let setAffinity = null;
-function excludeFromCapture(w) {
-  try {
-    if (!setAffinity) setAffinity = require('koffi').load('user32.dll').func('int __stdcall SetWindowDisplayAffinity(intptr_t hWnd, uint32_t dwAffinity)');
-    const h = w.getNativeWindowHandle();
-    return setAffinity(Number(h.length >= 8 ? h.readBigUInt64LE(0) : h.readUInt32LE(0)), 0x11) !== 0;
-  } catch { return false; }
-}
-// macOS: setContentProtection leaves a window out of screen capture, so the visitor sees what's underneath.
-// Older macOS versions may still capture it, so after showing the cover we grab one frame of the screen and
-// look for the cover's colour (a near-black no desktop is made of). If it shows up, we turn it off again.
-const MAC_COVER = [11, 2, 7];   // #0b0207
-async function coverLeaks() {
-  let checked = 0;
-  for (let attempt = 0; attempt < 3 && !checked; attempt++) {
-    if (attempt) await new Promise(r => setTimeout(r, 400));
-    let srcs = []; try { srcs = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 320, height: 200 } }); } catch { return null; }
-    for (const s of srcs) {
-      const bmp = s.thumbnail.toBitmap(), n = bmp.length / 4; if (!n) continue;
-      checked++; let hit = 0;
-      for (let i = 0; i < bmp.length; i += 4) if (Math.abs(bmp[i + 2] - MAC_COVER[0]) <= 4 && Math.abs(bmp[i + 1] - MAC_COVER[1]) <= 4 && Math.abs(bmp[i] - MAC_COVER[2]) <= 4) hit++;
-      if (hit / n > 0.3) return true;
-    }
-  }
-  return checked ? false : null;   // null: couldn't look at the screen at all
-}
-async function macPrivacyOn(who) {
-  const name = String(who || 'Your partner').replace(/[<>&"]/g, '').slice(0, 60);
-  for (const d of eScreen.getAllDisplays()) {
-    const w = new BrowserWindow({
-      ...d.bounds, frame: false, resizable: false, movable: false, focusable: false, skipTaskbar: true, backgroundColor: '#0b0207',
-      alwaysOnTop: true, hasShadow: false, fullscreenable: false, show: false, enableLargerThanScreen: true,
-      webPreferences: { contextIsolation: true, sandbox: true, javascript: false }
-    });
-    w.setContentProtection(true);
-    privacyWins.push(w);
-    w.setAlwaysOnTop(true, 'screen-saver');
-    w.setIgnoreMouseEvents(true);
-    w.setVisibleOnAllWorkspaces?.(true, { visibleOnFullScreen: true });
-    await w.loadURL(privacyPage(name, '#0b0207')).catch(() => {});
-    if (w.isDestroyed()) return { ok: false, error: 'Couldn’t show the privacy screen' };
-    w.showInactive(); w.setBounds(d.bounds);
-  }
-  await new Promise(r => setTimeout(r, 700));
-  const leaks = process.env.UNIDESK_TEST_COVER_LEAKS === '1' ? true : await coverLeaks();   // test hook: pretend this macOS captures it
-  if (leaks !== false) {
-    privacyOff(false);
-    return { ok: false, error: leaks ? 'This Mac’s screen sharing still shows the privacy screen to you, so UniDesk turned it off' : 'UniDesk couldn’t check that the privacy screen is hidden from you, so it stayed off' };
-  }
-  try { globalShortcut.register(PRIVACY_KEY, () => privacyOff(true)); } catch {}
-  return { ok: true, on: true };
-}
-ipcMain.handle('privacy', (_e, on, who) => {
-  if (!on) { privacyOff(false); return { ok: true, on: false }; }
-  if (privacyWins.length) return { ok: true, on: true };
-  if (process.platform === 'darwin') return macPrivacyOn(who);
-  if (process.platform !== 'win32') return { ok: false, error: 'The privacy screen isn’t available on Linux: its screen sharing can’t leave a window out' };
-  for (const d of eScreen.getAllDisplays()) {
-    const w = new BrowserWindow({
-      ...d.bounds, frame: false, resizable: false, movable: false, focusable: false, skipTaskbar: true, backgroundColor: '#000000',
-      alwaysOnTop: true, hasShadow: false, fullscreenable: false, show: false, enableLargerThanScreen: true,
-      webPreferences: { contextIsolation: true, sandbox: true, javascript: false }
-    });
-    privacyWins.push(w);
-    if (!excludeFromCapture(w)) { privacyOff(false); return { ok: false, error: 'The privacy screen needs Windows 10 (version 2004) or later on that PC' }; }
-    w.setAlwaysOnTop(true, 'screen-saver');
-    w.setIgnoreMouseEvents(true);            // the visitor's clicks pass straight through
-    w.setVisibleOnAllWorkspaces?.(true, { visibleOnFullScreen: true });
-    w.setBounds(d.bounds);
-    w.loadURL(privacyPage(String(who || 'Your partner').replace(/[<>&"]/g, '').slice(0, 60)));
-    // Showing a window resets its display affinity, so it stays invisible until it's excluded again
-    w.setOpacity(0);
-    w.once('ready-to-show', () => { if (w.isDestroyed()) return; w.showInactive(); if (excludeFromCapture(w)) w.setOpacity(1); else privacyOff(true); });
-  }
-  try { globalShortcut.register(PRIVACY_KEY, () => privacyOff(true)); } catch {}
-  return { ok: true, on: true };
-});
-app.on('will-quit', () => privacyOff(false));
-
-// ---------- Block local input & plain wallpaper (Windows, host side) ----------
+// ---------- Plain wallpaper (host side) ----------
 let u32 = null;
 function user32() {
   if (!u32) {
     const lib = require('koffi').load('user32.dll');
     u32 = {
-      spi: lib.func('int __stdcall SystemParametersInfoW(uint32_t uiAction, uint32_t uiParam, void *pvParam, uint32_t fWinIni)'),
-      block: lib.func('int __stdcall BlockInput(int fBlockIt)')
+      spi: lib.func('int __stdcall SystemParametersInfoW(uint32_t uiAction, uint32_t uiParam, void *pvParam, uint32_t fWinIni)')
     };
   }
   return u32;
 }
-// BlockInput stops the physical mouse and keyboard; input UniDesk injects from this same
-// thread still works. Windows always lifts it on Ctrl+Alt+Del, and when UniDesk exits.
-let inputBlocked = false;
-ipcMain.handle('block-input', (_e, on) => {
-  if (process.platform !== 'win32') return { ok: false, error: 'Blocking input is only available on Windows PCs for now' };
-  try {
-    const ok = user32().block(on ? 1 : 0) !== 0;
-    if (ok || !on) inputBlocked = !!on && ok;
-    return ok ? { ok: true, on: inputBlocked } : { ok: false, error: on ? 'UniDesk needs to run as administrator on that PC to block input' : 'Couldn’t unblock input' };
-  } catch { return { ok: false, error: 'Blocking input isn’t available on that PC' }; }
-});
 // The wallpaper is swapped for a plain colour only for this sign-in (not saved to the
 // registry), so even if UniDesk crashed it comes back at the next sign-in.
 const SPI_GETDESKWALLPAPER = 0x73, SPI_SETDESKWALLPAPER = 0x14, SPIF_SENDCHANGE = 0x02;
@@ -541,7 +418,7 @@ function wallRestore() {
   return true;
 }
 ipcMain.handle('wallpaper-restore', () => wallRestore());
-app.on('will-quit', () => { wallRestore(); if (inputBlocked) { try { user32().block(0); } catch {} } });
+app.on('will-quit', () => { wallRestore(); });
 app.whenReady().then(() => setTimeout(wallRestore, 1500));
 const { mouse, keyboard, Button, Key, Point } = require('@nut-tree-fork/nut-js');
 
@@ -568,8 +445,103 @@ function createWindow() {
   win.once('ready-to-show', () => { if (!hidden) win.show(); });
   win.on('close', (e) => { if (mainPrefs.tray && !quitting) { e.preventDefault(); win.hide(); trayHint(); } });
 }
+// ---------- Session tabs ----------
+// Extra sessions run as their own UniDesk page (a WebContentsView) under the main window's title bar,
+// each with its own connection. The main page draws the tab strip; 0 is the main page itself.
+const TAB_TOP = 46;                       // height of the main page's title bar
+const tabs = new Map();                   // id -> { view, title, live, full }
+let tabSeq = 0, activeTab = 0;
+const tabOf = (wc) => [...tabs.entries()].find(([, t]) => t.view.webContents === wc);
+const allPages = () => [win?.webContents, ...[...tabs.values()].map(t => t.view.webContents)].filter(w => w && !w.isDestroyed());
+function layoutTabs() {
+  if (!win || win.isDestroyed()) return;
+  const [w, h] = win.getContentSize();
+  for (const [id, t] of tabs) {
+    t.view.setBounds(t.full ? { x: 0, y: 0, width: w, height: h } : { x: 0, y: TAB_TOP, width: w, height: Math.max(0, h - TAB_TOP) });
+    t.view.setVisible(id === activeTab);
+  }
+}
+// The window's size settles a moment after fullscreen / maximize, so lay the tabs out again until it has.
+// A resize sent while the window is changing state can get lost on the page's side, so we check what size
+// the page really has and nudge it (1 px smaller, then exact) until it matches.
+let layoutGen = 0;
+function layoutSoon() {
+  const gen = ++layoutGen;
+  layoutTabs();
+  for (const ms of [60, 200, 450]) setTimeout(() => gen === layoutGen && layoutTabs(), ms);
+  const verify = async (left) => {
+    if (gen !== layoutGen || !win || win.isDestroyed()) return;
+    layoutTabs();
+    let bad = false;
+    for (const t of tabs.values()) {
+      if (t.view.webContents.isDestroyed()) continue;
+      const b = t.view.getBounds(); if (!b.width || !b.height) continue;
+      const got = await t.view.webContents.executeJavaScript('[innerWidth, innerHeight]').catch(() => null);
+      if (!got || Math.abs(got[0] * t.view.webContents.getZoomFactor() - b.width) > 2 || Math.abs(got[1] * t.view.webContents.getZoomFactor() - b.height) > 2) {
+        bad = true; t.view.setBounds({ ...b, height: Math.max(1, b.height - 1) }); t.view.setBounds(b);
+      }
+    }
+    if (bad && left > 0) setTimeout(() => verify(left - 1), 300);
+  };
+  setTimeout(() => verify(6), 900);
+}
+function sendTabs() {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send('tabs', { active: activeTab, list: [...tabs.entries()].map(([id, t]) => ({ id, title: t.title, live: t.live })) });
+}
+function selectTab(id) {
+  if (id !== 0 && !tabs.has(id)) id = 0;
+  activeTab = id; layoutTabs(); sendTabs();
+  const wc = id ? tabs.get(id).view.webContents : win.webContents;
+  if (!wc.isDestroyed()) wc.focus();
+}
+function closeTab(id) {
+  const t = tabs.get(id); if (!t) return;
+  tabs.delete(id);
+  const done = () => { try { win.contentView.removeChildView(t.view); } catch {} try { t.view.webContents.close(); } catch {} };
+  // end the session politely first, so the other PC sees "ended" rather than a dropped connection
+  t.view.webContents.executeJavaScript("typeof role !== 'undefined' && role ? (endAll({ quiet: true }), true) : false").catch(() => false).then((ended) => setTimeout(done, ended ? 400 : 0));
+  if (t.full && win.isFullScreen()) win.setFullScreen(false);
+  if (activeTab === id) activeTab = 0;
+  selectTab(activeTab);
+}
+ipcMain.handle('tab-open', (_e, target) => {
+  if (!win || win.isDestroyed()) return 0;
+  if (tabs.size >= 8) return 0;
+  const id = ++tabSeq;
+  const view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+  view.setBackgroundColor('#070a14');
+  const t = { view, title: 'New tab', live: false, full: false };
+  tabs.set(id, t);
+  win.contentView.addChildView(view);
+  const query = { tab: String(id) }; const tgt = String(target || '').replace(/\D/g, ''); if (tgt.length === 9) query.target = tgt;
+  view.webContents.loadFile('index.html', { query });
+  view.webContents.on('render-process-gone', () => closeTab(id));
+  view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  selectTab(id);
+  return id;
+});
+ipcMain.handle('tab-select', (_e, id) => selectTab(Number(id) || 0));
+ipcMain.handle('tab-close', (_e, id) => closeTab(Number(id)));
+// fullscreen for a tab: the whole window goes fullscreen and the tab covers it (title bar included)
+function setTabFull(t, on) {
+  if (!t || t.full === !!on) return;
+  t.full = !!on;
+  if (win.isFullScreen() !== t.full) win.setFullScreen(t.full);
+  layoutSoon();
+  if (!t.view.webContents.isDestroyed()) t.view.webContents.send('tab-fs', t.full);
+}
+ipcMain.handle('tab-fullscreen', (e, on) => { const hit = tabOf(e.sender); if (!hit) return false; setTabFull(hit[1], on); return hit[1].full; });
+ipcMain.on('tab-state', (e, s) => {
+  const hit = tabOf(e.sender); if (!hit) return;
+  const [, t] = hit; t.title = String(s?.title || 'New tab').slice(0, 60); t.live = !!s?.live; sendTabs();
+});
+
 app.whenReady().then(() => {
   createWindow(); createTray();
+  win.on('resize', layoutTabs);
+  for (const ev of ['maximize', 'unmaximize', 'restore', 'enter-full-screen']) win.on(ev, layoutSoon);
+  win.on('leave-full-screen', () => { for (const t of tabs.values()) setTabFull(t, false); layoutSoon(); });
   if (app.isPackaged) setTimeout(() => ensureService().catch(() => {}), 4000); // install/update the Secure Desktop service
 });
 app.on('window-all-closed', () => app.quit());
@@ -949,7 +921,7 @@ ipcMain.handle('save-shot', (_e, name, buf) => { const p = path.join(mediaDir('i
 
 // ---------- Theme ----------
 ipcMain.handle('system-dark', () => nativeTheme.shouldUseDarkColors);
-nativeTheme.on('updated', () => win?.webContents.send('system-theme', nativeTheme.shouldUseDarkColors));
+nativeTheme.on('updated', () => { for (const w of allPages()) w.send('system-theme', nativeTheme.shouldUseDarkColors); });
 ipcMain.on('theme', (_e, dark) => {
   if (!win) return;
   try { win.setTitleBarOverlay({ color: '#00000000', symbolColor: dark ? '#c9d1ea' : '#3a4366', height: 46 }); } catch {}
@@ -1002,7 +974,8 @@ ipcMain.on('clipboard-write', (_e, t) => clipboard.writeText(String(t)));
 // ---------- File transfer (received files land in Downloads/UniDesk) ----------
 const incoming = new Map();
 const recvDir = () => { const d = path.join(app.getPath('downloads'), 'UniDesk'); fs.mkdirSync(d, { recursive: true }); return d; };
-ipcMain.on('file-start', (_e, { id, name, dir }) => {
+ipcMain.on('file-start', (e, { id, name, dir }) => {
+  const page = e.sender;
   const safe = path.basename(String(name)).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'file';
   // an upload from the visitor's file manager goes into the folder they were browsing
   let base = recvDir(), into = false;
@@ -1010,13 +983,13 @@ ipcMain.on('file-start', (_e, { id, name, dir }) => {
   let target = path.join(base, safe), n = 1;
   while (fs.existsSync(target)) { const p = path.parse(safe); target = path.join(base, `${p.name} (${n++})${p.ext}`); }
   const stream = fs.createWriteStream(target);
-  stream.on('error', () => { incoming.delete(id); try { fs.unlinkSync(target); } catch {} if (win && !win.isDestroyed()) win.webContents.send('file-failed', path.basename(target)); });
-  incoming.set(id, { stream, target, into });
+  stream.on('error', () => { incoming.delete(id); try { fs.unlinkSync(target); } catch {} if (!page.isDestroyed()) page.send('file-failed', path.basename(target)); });
+  incoming.set(id, { stream, target, into, page });
 });
 ipcMain.on('file-chunk', (_e, { id, b64 }) => incoming.get(id)?.stream.write(Buffer.from(b64, 'base64')));
 ipcMain.on('file-end', (_e, { id }) => {
   const f = incoming.get(id); if (!f) return;
-  f.stream.end(() => { incoming.delete(id); win.webContents.send('file-saved', f.target, f.into); });
+  f.stream.end(() => { incoming.delete(id); if (!f.page.isDestroyed()) f.page.send('file-saved', f.target, f.into); });
 });
 ipcMain.on('show-file', (_e, p) => shell.showItemInFolder(p));
 

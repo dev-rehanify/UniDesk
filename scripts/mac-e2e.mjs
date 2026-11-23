@@ -1,6 +1,5 @@
 // Test of the packaged macOS app (run in CI on Apple Silicon).
-// Starts the real UniDesk.app and checks it runs, and that the privacy screen is left out of screen capture:
-// the app grabs a frame of the screen itself and refuses to turn the privacy screen on if the cover shows up in it.
+// Starts the real UniDesk.app (built with only this Mac's native files) and checks it comes up and works.
 // Usage: node scripts/mac-e2e.mjs path/to/UniDesk.app/Contents/MacOS/UniDesk
 import { spawn } from 'child_process';
 import path from 'path';
@@ -28,45 +27,18 @@ async function page(port, ms = 60000) {
   return null;
 }
 let log = '';
-function launch(port, env = {}) {
-  log = '';
-  const c = spawn(app, [`--remote-debugging-port=${port}`], { env: { ...process.env, UNIDESK_PROFILE: 'ciMac', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
-  c.stdout.on('data', d => { log += d; }); c.stderr.on('data', d => { log += d; });
-  return c;
-}
+const proc = spawn(app, ['--remote-debugging-port=9311'], { env: { ...process.env, UNIDESK_PROFILE: 'ciMac' }, stdio: ['ignore', 'pipe', 'pipe'] });
+proc.stdout.on('data', d => { log += d; }); proc.stderr.on('data', d => { log += d; });
 
-// 1. The app starts (native modules for this Mac only, koffi removed)
-let proc = launch(9311);
-let A = await page(9311, 60000);
+const A = await page(9311, 60000);
 check('app starts', !!A, A ? '' : log.split('\n').filter(Boolean).slice(-6).join(' | '));
 if (!A) { proc.kill('SIGKILL'); process.exit(1); }
 await sleep(3000);
 check('shows an address', /^\d{9}$/.test(String(await A(`myId`))));
-
-// 2. Privacy screen: on, self-checked against a real screen grab, then off
-const on = await A(`window.dw.privacy(true, 'CI').then(JSON.stringify)`);
-check('privacy screen turns on and is left out of the screen capture', /"ok":true/.test(on), on);
-await sleep(1500);
-const off = await A(`window.dw.privacy(false).then(JSON.stringify)`);
-check('privacy screen turns off', /"ok":true/.test(off) && /"on":false/.test(off), off);
-
-// 3. Other host features answer clearly instead of failing silently
-const blk = await A(`window.dw.blockInput(true).then(JSON.stringify)`);
-check('block input says it is Windows only', /only available on Windows/.test(blk), blk);
+check('registers with the signaling server', !!(await (async () => { for (let i = 0; i < 40; i++) { if (await A(`!!(peer && peer.open)`)) return true; await sleep(500); } return false; })()));
+check('reads this Mac\'s info', /mac|darwin/i.test(String(await A(`window.dw.sysinfo().then(i => i.os)`))), String(await A(`window.dw.sysinfo().then(i => i.os)`)));
 check('wallpaper hiding is skipped on macOS', (await A(`window.dw.wallpaperHide().then(String)`)) === 'false');
-proc.kill('SIGKILL'); await sleep(2000);
-
-// 4. If a macOS version still captured the cover, UniDesk must turn it off and say so
-proc = launch(9312, { UNIDESK_TEST_COVER_LEAKS: '1' });
-A = await page(9312, 60000);
-check('app starts again', !!A);
-if (A) {
-  await sleep(3000);
-  const leak = await A(`window.dw.privacy(true, 'CI').then(JSON.stringify)`);
-  check('privacy screen refuses when the cover would be visible to the visitor', /"ok":false/.test(leak) && /turned it off/.test(leak), leak);
-  const again = await A(`window.dw.privacy(false).then(JSON.stringify)`);
-  check('turning it off afterwards still answers normally', /"ok":true/.test(again) && /"on":false/.test(again), again);
-}
+check('no remote terminal, privacy screen or input blocking', (await A(`['termBtn', 'privBtn', 'blockBtn'].every(id => !document.getElementById(id)) && !window.dw.termInput && !window.dw.privacy && !window.dw.blockInput`)) === true);
 proc.kill('SIGKILL');
 console.log('\n' + results.join('\n'));
 process.exit(failed ? 1 : 0);

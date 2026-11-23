@@ -37,11 +37,9 @@
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
     <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></symbol>
-    <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.8 8.3 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
 <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
 <symbol id="i-fplus" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/></symbol>
 <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
-<symbol id="i-noinput" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="17" rx="5"/><path d="M12 7v3"/><path d="M3 3l18 18"/></symbol>
 <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></symbol>
 <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
 <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></symbol>
@@ -56,7 +54,6 @@
     <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
     <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/></symbol>
     <symbol id="i-admin" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 8v5M12 16h.01"/></symbol>
-    <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></symbol>
     <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="2.2"/><path d="M13.6 14.6L16 17"/></symbol>
     <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></symbol>
@@ -71,6 +68,7 @@
     <div class="logo"><img src="assets/logo.svg" alt=""></div>
     <span class="name">Uni<b>Desk</b></span>
   </div>
+  <nav class="tab-strip" id="tabStrip" hidden aria-label="Sessions"></nav>
   <div class="status" id="statusPill"><span class="dot" id="dot"></span><span id="statusText">Connecting to network…</span></div>
   <div class="tb-actions">
     <button class="update-pill" id="updateBtn"><svg class="ic sm"><use href="#i-download"/></svg><span id="updateLabel">Update</span></button>
@@ -169,12 +167,9 @@
     <button class="tb" id="recBtn" title="Record session"><span class="rec-dot"></span><span id="recTime"></span></button>
     <button class="tb" id="fileBtn" title="Send files (or drag & drop)"><svg class="ic"><use href="#i-file"/></svg></button>
     <button class="tb" id="browseBtn" title="Browse remote files" style="display:none"><svg class="ic"><use href="#i-folder"/></svg></button>
-    <button class="tb" id="privBtn" title="Privacy screen: black out the remote monitor" style="display:none"><svg class="ic"><use href="#i-eyeoff"/></svg></button>
-    <button class="tb" id="blockBtn" title="Block their mouse &amp; keyboard" style="display:none"><svg class="ic"><use href="#i-noinput"/></svg></button>
     <button class="tb" id="piBtn" title="Remote PC info" style="display:none"><svg class="ic"><use href="#i-info"/></svg></button>
     <button class="tb" id="tmBtn" title="Remote task manager" style="display:none"><svg class="ic"><use href="#i-cpu"/></svg></button>
     <button class="tb" id="micBtn" title="Talk (microphone)"><svg class="ic"><use href="#i-mic"/></svg></button>
-    <button class="tb" id="termBtn" title="Remote terminal" style="display:none"><svg class="ic"><use href="#i-term"/></svg></button>
     <button class="tb" id="chatBtn" title="Chat"><svg class="ic"><use href="#i-chat"/></svg><span class="badge" id="chatBadge"></span></button>
     <label class="tb toggle" title="Clipboard sync"><svg class="ic"><use href="#i-clip"/></svg><input type="checkbox" id="clipSync" checked><span class="sw"></span></label>
     <button class="tb" id="fullBtn" title="Fullscreen (F11)"><svg class="ic"><use href="#i-full"/></svg></button>
@@ -316,8 +311,6 @@
             <label class="switch"><input type="checkbox" data-set="allowControl"><i></i></label></div>
           <div class="row"><svg class="ic"><use href="#i-file"/></svg><div class="txt"><b>Allow receiving files</b><span>Saved to Downloads\UniDesk</span></div>
             <label class="switch"><input type="checkbox" data-set="allowFiles"><i></i></label></div>
-          <div class="row"><svg class="ic"><use href="#i-term"/></svg><div class="txt"><b>Allow remote terminal by default</b><span>Lets visitors run commands on this PC. You can also allow it per session.</span></div>
-            <label class="switch"><input type="checkbox" data-set="allowTerminal"><i></i></label></div>
           <div class="row"><svg class="ic"><use href="#i-folder"/></svg><div class="txt"><b>Allow browsing my files by default</b><span>Lets visitors see and download files from this PC</span></div>
             <label class="switch"><input type="checkbox" data-set="allowBrowse"><i></i></label></div>
           <div class="row"><svg class="ic"><use href="#i-clip"/></svg><div class="txt"><b>Allow clipboard access</b><span>Let visitors read and write your clipboard</span></div>
@@ -470,7 +463,6 @@
   <div class="req-checks">
     <label class="check"><input type="checkbox" id="reqFiles"><span></span>Files</label>
     <label class="check"><input type="checkbox" id="reqClip"><span></span>Clipboard</label>
-    <label class="check"><input type="checkbox" id="reqTerm"><span></span>Terminal</label>
     <label class="check"><input type="checkbox" id="reqBrowse"><span></span>Browse</label>
   </div>
   <div class="req-actions"><button class="ghost-btn" id="reqDecline">Decline</button><button class="primary" id="reqAccept"><span>Accept</span></button></div>
@@ -508,13 +500,6 @@
   <div class="tm-sum"><span>CPU <b id="tmCpu">–</b></span><span>Memory <b id="tmMem">–</b></span><div class="tm-meter"><i id="tmMemBar"></i></div><span><b id="tmCount">–</b> processes</span></div>
   <div class="tm-head" id="tmHead"><button data-sort="name">Name</button><button data-sort="pid">PID</button><button data-sort="cpu">CPU</button><button data-sort="mem" class="on">Memory</button><span></span></div>
   <div class="fb-list" id="tmList"><div class="fb-msg">Loading…</div></div>
-</aside>
-
-<!-- ============ TERMINAL ============ -->
-<aside id="term" class="term">
-  <div class="chat-head"><svg class="ic"><use href="#i-term"/></svg>Remote terminal<button class="icon-btn" id="termClear" title="Clear"><svg class="ic"><use href="#i-refresh"/></svg></button><button class="icon-btn" id="termClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
-  <pre id="termOut" class="term-out"></pre>
-  <div class="term-in"><span>&gt;</span><input id="termIn" spellcheck="false" autocomplete="off" placeholder="Type a command and press Enter"></div>
 </aside>
 
 <!-- ============ FORCED UPDATE ============ -->

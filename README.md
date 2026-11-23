@@ -33,14 +33,12 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 | ⚡ **Fast P2P streaming** | AV1 → VP9 → H.264 codec preference, up to **4K at 60 fps**, low-latency playout, live stats (codec, fps, Mbps, ping). |
 | 🔢 **One-time access codes** | A temporary code (like TeamViewer's password) that works once and then changes. |
 | 🗂️ **Remote file manager** | Browse the other PC's drives, download, upload into any folder, create folders, rename and delete (to the Recycle Bin): only when allowed. |
-| 🕶️ **Privacy screen** | Black out the remote PC's monitors while you work; you still see the real desktop. The person there can press `Ctrl+Alt+Shift+P` (`⌘⌥⇧P` on a Mac) to show it again. Windows and macOS; on a Mac, UniDesk checks a real screen grab and won't turn it on unless it's really hidden from the visitor. |
 | ⏸️ **Pause sharing** | The host can freeze the screen (e.g. while typing a password); remote input is blocked while paused. |
-| 🚫 **Block their input** | Lock the remote mouse and keyboard while you work (Windows). Lifted automatically when the session ends, control is taken back or the connection goes quiet; Ctrl+Alt+Del there always lifts it. |
 | 🖼️ **Plain wallpaper** | The host's wallpaper is hidden during sessions for a faster, sharper picture, and comes back when the visitor leaves (Windows, and GNOME, Cinnamon or MATE on Linux). |
 | ℹ️ **Remote PC info** | Live CPU, memory, disks, battery, network, screens and uptime of the other PC, refreshed every 5 seconds. |
 | 🔗 **Open a link there** | Type a web address and it opens in the other PC's browser (http/https only). |
 | 📊 **Remote task manager** | See the other PC's processes with live CPU and memory, search them and end a frozen app. |
-| 🧾 **Session reports** | After every incoming session, a report of what the visitor did: files sent and downloaded, folders created, renamed or deleted, terminal commands, ended programs, opened links, power actions and permission changes. Open it from Settings → Session history, or copy it as text. Stored only on your PC. |
+| 🧾 **Session reports** | After every incoming session, a report of what the visitor did: files sent and downloaded, folders created, renamed or deleted, ended programs, opened links, power actions and permission changes. Open it from Settings → Session history, or copy it as text. Stored only on your PC. |
 | ⏺️ **Record incoming sessions** | Optional security log: every session on your PC is saved to Videos\UniDesk\Incoming, old recordings are cleaned up after 7/30/90 days, and visitors always see a REC badge. |
 | ⏻ **Sleep, sign out, shut down** | Power options for the remote PC in the Keys menu (needs control). |
 | ⟳ **Restart & reconnect** | Restart the remote PC and UniDesk waits for it, then reconnects by itself. |
@@ -55,8 +53,7 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 | 🔄 **Automatic updates** | New builds download, verify (SHA-256) and install themselves, never during a session. |
 | 📶 **Live connection quality** | Signal bars and a session timer on both sides. |
 | ✋ **Request control** | View-only visitors can ask for control; the host allows it with one click. |
-| ✅ **Smart access requests** | Choose full control or view-only, plus files, clipboard and terminal, before accepting. Auto-declines after 30 s. |
-| 🖥️ **Remote terminal** | Run PowerShell (Windows) or shell (macOS) commands on the remote PC, only when allowed. |
+| ✅ **Smart access requests** | Choose full control or view-only, plus files, clipboard and file browsing, before accepting. Auto-declines after 30 s. |
 | ⏻ **Wake-on-LAN** | Wake sleeping PCs on your network from the address book. |
 | ⌨️ **System keys** | In fullscreen, Alt+Tab and the Windows key go to the remote PC. |
 | 📶 **LAN mode** | Desks on the same network find each other and connect with **no internet server at all**. |
@@ -66,6 +63,7 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 | 🎥 **Record & screenshot** | Save sessions as WebM and capture remote screenshots. |
 | 🔁 **Auto-reconnect** | Recovers from dropped connections automatically. |
 | 📒 **Address book** | Name, pin and search your desks, with remote PC info (name, OS, RAM, cores). Add notes to any desk (who uses it, where it is) and search by them. Export and import it as a file to move to a new PC (passwords are never included). |
+| 🗂️ **Sessions in tabs** | Control several PCs at once from one window: press **+** in the title bar during a session, or Ctrl+click (⌘+click) a saved desk. Each tab has its own connection, fullscreen and file transfers, and the other PC still sees your own address. |
 | ✎ **Text snippets** | Save commands, email addresses and other text you type often, then type them on the remote PC in one click. |
 | 📋 **Clipboard history** | Everything copied on the remote PC during a session is listed in the snippets panel: copy it again, type it there, or keep it as a snippet. Kept in memory only and cleared when the session ends. |
 | ⏱️ **Session time limit** | End every incoming session after 30 minutes, 1 hour or 2 hours. The visitor is warned a minute before. |

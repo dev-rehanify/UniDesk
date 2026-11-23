@@ -1,6 +1,6 @@
 // End-to-end test of the Linux AppImage on a virtual X screen (run in CI).
 // Two copies connect through the public signaling server; we check the session, the picture,
-// mouse control, the terminal, file transfer and the PC info panel.
+// mouse control, file transfer, the PC info panel and the wallpaper.
 // Usage: node scripts/linux-e2e.mjs path/to/UniDesk.AppImage   (with DISPLAY set to a running Xvfb)
 import { spawn, execFileSync } from 'child_process';
 import fs from 'fs'; import path from 'path'; import os from 'os';
@@ -57,18 +57,16 @@ const gs = (...a) => { try { return execFileSync('gsettings', a, { stdio: ['igno
 const hasGs = gs('set', 'org.gnome.desktop.background', 'picture-options', 'zoom') !== null && gs('get', 'org.gnome.desktop.background', 'picture-options') === "'zoom'";
 check('test desktop has GNOME wallpaper settings', hasGs);
 
-// 2. Connect and accept with control, files and terminal
+// 2. Connect and accept with control and files
 await B(`connect('${idA}'); true`);
 check('host sees the request', !!(await until(() => A(`$('reqCard').classList.contains('show')`), 30000)));
-await A(`$('reqControl').checked = true; $('reqFiles').checked = true; $('reqTerm').checked = true; $('reqAccept').click(); true`);
+await A(`$('reqControl').checked = true; $('reqFiles').checked = true; $('reqAccept').click(); true`);
 check('session starts', !!(await until(() => B(`$('session').classList.contains('active') && $('video').videoWidth > 0`), 30000)));
 const vw = await B(`$('video').videoWidth + 'x' + $('video').videoHeight`);
 await sleep(2000);
 const bright = await B(`(() => { const v = $('video'); const c = document.createElement('canvas'); c.width = 64; c.height = 40; const g = c.getContext('2d'); g.drawImage(v, 0, 0, 64, 40); const d = g.getImageData(0, 0, 64, 40).data; let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) { s += d[i] + d[i+1] + d[i+2]; n++; } return Math.round(s / n / 3); })()`);
 check('picture arrives', /^\d+x\d+$/.test(vw) && vw !== '0x0', `${vw}, brightness ${bright}`);
 if (hasGs) check('wallpaper is hidden during the session', gs('get', 'org.gnome.desktop.background', 'picture-options') === "'none'", gs('get', 'org.gnome.desktop.background', 'picture-options'));
-const priv = await A(`window.dw.privacy(true, 'CI').then(JSON.stringify)`);
-check('privacy screen says clearly it is not available on Linux', /not available on Linux|isn’t available on Linux/.test(priv) && /"ok":false/.test(priv), priv);
 check('host reports Linux', /linux/i.test(String(await until(() => B(`remoteInfo?.os || ''`), 15000))), String(await B(`remoteInfo?.os`)));
 
 // 3. Mouse control
@@ -78,10 +76,8 @@ const [sw, sh] = vw.split('x').map(Number);
 const near = (p, fx, fy) => Math.abs(p.x - sw * fx) < 12 && Math.abs(p.y - sh * fy) < 12;
 check('visitor moves the mouse', near(m1, 0.25, 0.25) && near(m2, 0.75, 0.75), `${m1.x},${m1.y} -> ${m2.x},${m2.y} on ${vw}`);
 
-// 4. Remote terminal
-await B(`send({ t: 'term-in', d: 'echo unidesk-$((40+2))\\n' }); true`);
-const termOk = await until(async () => /unidesk-42/.test(String(await B(`$('termOut').textContent`))), 15000);
-check('remote terminal runs commands', !!termOk, String(await B(`$('termOut').textContent`)).replace(/\s+/g, ' ').slice(0, 120));
+// 4. The remote terminal, privacy screen and input blocking were removed on purpose: make sure they stay gone
+check('no remote terminal, privacy screen or input blocking', (await B(`['termBtn', 'privBtn', 'blockBtn'].every(id => !document.getElementById(id)) && !window.dw.termInput && !window.dw.privacy && !window.dw.blockInput`)) === true);
 
 // 5. File transfer into the host's Downloads/UniDesk
 const recv = path.join(os.homedir(), 'Downloads', 'UniDesk', 'ci-linux.txt'); fs.rmSync(recv, { force: true });

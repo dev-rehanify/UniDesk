@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install UniDesk: step-by-step for Windows, macOS and Linux</title>
+<meta name="description" content="How to install UniDesk on Windows, macOS and Linux: turn off the safety check that blocks new apps, confirm it is off, then download and run UniDesk.">
+<link rel="canonical" href="https://dev-rehanify.github.io/UniDesk/install.html">
+<meta name="theme-color" content="#0b1020">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+  :root { --bg:#0b1020; --card:rgba(255,255,255,.05); --stroke:rgba(255,255,255,.09); --text:#e9ecf8; --mute:#9aa3c0; --a1:#7b5cff; --a2:#4f7dff; --ok:#2ee59d; --warn:#ffb547; --grad:linear-gradient(135deg,#7b5cff,#4f7dff); color-scheme:dark light; }
+  @media (prefers-color-scheme: light) { :root { --bg:#eef1f8; --card:rgba(255,255,255,.8); --stroke:rgba(40,55,120,.12); --text:#121833; --mute:#5f6888; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .bg { position:fixed; inset:0; z-index:-1; overflow:hidden; } .bg i { position:absolute; width:60vmax; height:60vmax; border-radius:50%; filter:blur(100px); opacity:.25; }
+  .bg i:nth-child(1){ background:#3a5bff; top:-30vmax; left:-20vmax; } .bg i:nth-child(2){ background:#8b3dff; top:-20vmax; right:-25vmax; }
+  a { color:inherit; }
+  .wrap { max-width:820px; margin:0 auto; padding:0 16px 60px; }
+  nav { display:flex; align-items:center; gap:10px; padding:20px 0; }
+  nav img { width:30px; height:30px; } nav b { font-size:18px; }
+  nav a.back { margin-left:auto; font-size:14px; color:var(--mute); text-decoration:none; padding:10px 6px; }
+  h1 { font-size:clamp(28px,5vw,42px); line-height:1.15; letter-spacing:-.8px; margin:18px 0 8px; }
+  .lead { color:var(--mute); margin:0 0 22px; }
+  .tabs { display:flex; gap:6px; padding:5px; border-radius:14px; background:var(--card); border:1px solid var(--stroke); margin-bottom:18px; }
+  .tabs button { flex:1; min-height:42px; border:0; border-radius:10px; background:transparent; color:var(--mute); font:600 15px inherit; font-family:inherit; cursor:pointer; }
+  .tabs button.on { background:var(--grad); color:#fff; }
+  .os { display:none; } .os.on { display:block; }
+  ol.steps { list-style:none; padding:0; margin:0; counter-reset:s; display:grid; gap:12px; }
+  ol.steps > li { counter-increment:s; position:relative; padding:16px 16px 16px 58px; border-radius:16px; background:var(--card); border:1px solid var(--stroke); }
+  ol.steps > li::before { content:counter(s); position:absolute; left:16px; top:15px; width:28px; height:28px; border-radius:50%; display:grid; place-items:center; background:var(--grad); color:#fff; font-weight:700; font-size:14px; }
+  ol.steps h3 { margin:0 0 4px; font-size:17px; }
+  ol.steps p { margin:4px 0; color:var(--mute); font-size:15px; }
+  ol.steps p b, ol.steps li li b { color:var(--text); }
+  ol.steps ul { margin:6px 0; padding-left:20px; color:var(--mute); font-size:15px; }
+  .cmd { position:relative; margin:10px 0 4px; border-radius:12px; background:rgba(0,0,0,.35); border:1px solid var(--stroke); }
+  @media (prefers-color-scheme: light) { .cmd { background:#141a33; color:#e9ecf8; } }
+  .cmd pre { margin:0; padding:12px 92px 12px 14px; overflow-x:auto; font:13px/1.5 ui-monospace,"Cascadia Mono",Consolas,monospace; white-space:pre-wrap; word-break:break-all; color:#e9ecf8; }
+  .cmd button { position:absolute; top:8px; right:8px; min-height:34px; padding:0 12px; border:0; border-radius:9px; background:var(--a1); color:#fff; font:600 13px inherit; font-family:inherit; cursor:pointer; }
+  .res { font-size:14px; margin-top:6px; }
+  .res .ok { color:var(--ok); font-weight:600; } .res .no { color:var(--warn); font-weight:600; }
+  .dl { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .btn { white-space:nowrap; display:inline-flex; align-items:center; justify-content:center; min-height:46px; padding:0 20px; border-radius:12px; background:var(--grad); color:#fff; font-weight:650; text-decoration:none; }
+  .btn.s { background:var(--card); color:var(--text); border:1px solid var(--stroke); }
+  .note { margin-top:18px; padding:14px 16px; border-radius:14px; border:1px solid var(--stroke); background:var(--card); color:var(--mute); font-size:14.5px; }
+  .note b { color:var(--text); }
+  @media (max-width:480px) { ol.steps > li { padding:14px 14px 14px 50px; } ol.steps > li::before { left:12px; } .cmd pre { padding:44px 12px 12px; } .dl .btn { flex:1 1 100%; } }
+</style>
+</head>
+<body>
+<div class="bg"><i></i><i></i></div>
+<div class="wrap">
+  <nav><img src="logo.svg" alt=""><b>UniDesk</b><a class="back" href="./">← Back to UniDesk</a></nav>
+  <h1>Install UniDesk</h1>
+  <p class="lead">UniDesk is free and open source, but it isn’t code-signed, so your computer’s safety check may stop it the first time. Follow the steps for your system: turn the check off, confirm it’s off, then install.</p>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" data-os="windows">Windows</button>
+    <button role="tab" data-os="mac">Mac</button>
+    <button role="tab" data-os="linux">Linux</button>
+  </div>
+
+  <!-- ===================== WINDOWS ===================== -->
+  <section class="os" id="windows">
+    <ol class="steps">
+      <li>
+        <h3>Turn off Smart App Control</h3>
+        <p>Windows 11 may have <b>Smart App Control</b> on. It blocks apps that aren’t code-signed and has no “run anyway” option.</p>
+        <ul>
+          <li>Open <b>Start</b>, type <b>Windows Security</b> and open it.</li>
+          <li>Go to <b>App &amp; browser control</b> → <b>Smart App Control settings</b>.</li>
+          <li>Choose <b>Off</b>.</li>
+        </ul>
+        <p>Windows 10 doesn’t have Smart App Control: skip to step 3. On some Windows 11 versions, Smart App Control can’t be switched back on later without reinstalling Windows.</p>
+      </li>
+      <li>
+        <h3>Check that it’s off</h3>
+        <p>Open <b>Start</b>, type <b>PowerShell</b>, open it, paste this and press <b>Enter</b>:</p>
+        <div class="cmd"><pre id="winCheck">$s=$null; try { $s=(Get-MpComputerStatus -ErrorAction Stop).SmartAppControlState } catch {}; if (-not $s) { $v=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -ErrorAction SilentlyContinue).VerifiedAndReputablePolicyState; if ($v -eq 1) { $s='On' } elseif ($v -eq 2) { $s='Evaluation' } else { $s='Off' } }; if ($s -eq 'Off') { 'OK: Smart App Control is off. You can install UniDesk.' } else { "NOT YET: Smart App Control is $s. Turn it off, then run this check again." }</pre><button data-copy="winCheck">Copy</button></div>
+        <p class="res">It should say <span class="ok">OK: Smart App Control is off</span>. If it says <span class="no">NOT YET</span>, go back to step 1.</p>
+      </li>
+      <li>
+        <h3>Download and run the installer</h3>
+        <div class="dl"><a class="btn" href="https://github.com/dev-rehanify/UniDesk/releases/latest/download/UniDesk-1.1.0-win-x64.exe">Download installer</a><a class="btn s" href="https://github.com/dev-rehanify/UniDesk/releases/latest/download/UniDesk-1.1.0-win-x64.zip">Portable .zip</a></div>
+        <p>If you see <b>“Windows protected your PC”</b> (SmartScreen), click <b>More info</b> → <b>Run anyway</b>. Then click <b>Yes</b> when Windows asks for administrator permission: UniDesk runs as administrator so you can control every app, the lock screen and UAC prompts.</p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ===================== MAC ===================== -->
+  <section class="os" id="mac">
+    <ol class="steps">
+      <li>
+        <h3>Download UniDesk</h3>
+        <p>Pick the one for your Mac (Apple menu → <b>About This Mac</b> → “Chip”):</p>
+        <div class="dl"><a class="btn" href="https://github.com/dev-rehanify/UniDesk/releases/latest/download/UniDesk-1.1.0-mac-arm64.dmg">Apple Silicon (M1–M4)</a><a class="btn s" href="https://github.com/dev-rehanify/UniDesk/releases/latest/download/UniDesk-1.1.0-mac-x64.dmg">Intel</a></div>
+        <p>Open the .dmg and drag <b>UniDesk</b> into <b>Applications</b>.</p>
+      </li>
+      <li>
+        <h3>Let macOS open it (Gatekeeper)</h3>
+        <p>macOS stops apps from developers it hasn’t verified. Allow UniDesk once:</p>
+        <ul>
+          <li>Open UniDesk from Applications. macOS says it can’t be opened: click <b>Done</b>.</li>
+          <li>Open <b>System Settings</b> → <b>Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b> next to UniDesk, then enter your password.</li>
+        </ul>
+        <p>Or do it in one step: open <b>Terminal</b>, paste this and press <b>Return</b>:</p>
+        <div class="cmd"><pre id="macAllow">xattr -dr com.apple.quarantine /Applications/UniDesk.app</pre><button data-copy="macAllow">Copy</button></div>
+      </li>
+      <li>
+        <h3>Check that it’s allowed</h3>
+        <p>In <b>Terminal</b>, paste this and press <b>Return</b>:</p>
+        <div class="cmd"><pre id="macCheck">xattr -p com.apple.quarantine /Applications/UniDesk.app >/dev/null 2>&amp;1 &amp;&amp; echo "NOT YET: macOS will still ask. Use Open Anyway (step 2)." || echo "OK: UniDesk is allowed to open."</pre><button data-copy="macCheck">Copy</button></div>
+        <p class="res">After using <b>Open Anyway</b> the check may still say NOT YET; that’s fine as long as UniDesk now opens.</p>
+      </li>
+      <li>
+        <h3>Allow screen and control</h3>
+        <p>So people you invite can see and control your Mac, turn on <b>UniDesk</b> in <b>System Settings → Privacy &amp; Security → Screen Recording</b> and <b>Accessibility</b>. UniDesk opens these for you the first time.</p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ===================== LINUX ===================== -->
+  <section class="os" id="linux">
+    <ol class="steps">
+      <li>
+        <h3>Download UniDesk</h3>
+        <div class="dl"><a class="btn" href="https://github.com/dev-rehanify/UniDesk/releases/latest/download/UniDesk-1.1.0-linux-x64.AppImage">Download AppImage</a></div>
+      </li>
+      <li>
+        <h3>Allow it to run</h3>
+        <p>Linux doesn’t run downloaded files until you mark them as programs. In a terminal, in the folder you downloaded to:</p>
+        <div class="cmd"><pre id="linAllow">chmod +x UniDesk-1.1.0-linux-x64.AppImage</pre><button data-copy="linAllow">Copy</button></div>
+        <p>AppImages need <b>FUSE 2</b>. On Ubuntu 24.04 and newer: <code>sudo apt install libfuse2t64</code>. On Ubuntu 22.04: <code>sudo apt install libfuse2</code>.</p>
+      </li>
+      <li>
+        <h3>Check everything is ready</h3>
+        <div class="cmd"><pre id="linCheck">[ -x UniDesk-1.1.0-linux-x64.AppImage ] &amp;&amp; echo "OK: the file can run" || echo "NOT YET: run the chmod command"; (ldconfig -p | grep -q "libfuse.so.2") &amp;&amp; echo "OK: FUSE 2 is installed" || echo "NOT YET: install libfuse2 (see above)"; [ "$XDG_SESSION_TYPE" = "wayland" ] &amp;&amp; echo "NOTE: you're on Wayland. Remote control works on X11: choose 'Ubuntu on Xorg' at the login screen." || echo "OK: X11 session"</pre><button data-copy="linCheck">Copy</button></div>
+      </li>
+      <li>
+        <h3>Run UniDesk</h3>
+        <div class="cmd"><pre id="linRun">./UniDesk-1.1.0-linux-x64.AppImage</pre><button data-copy="linRun">Copy</button></div>
+        <p>No FUSE? It also runs with <code>./UniDesk-1.1.0-linux-x64.AppImage --appimage-extract-and-run</code>.</p>
+      </li>
+    </ol>
+  </section>
+
+  <div class="note"><b>Just want to control a computer from a phone or tablet?</b> Nothing to install: open the <a href="m/">mobile viewer</a> in your browser.</div>
+</div>
+<script>
+  const tabs = [...document.querySelectorAll('.tabs button')];
+  function pick(os) {
+    tabs.forEach(t => t.classList.toggle('on', t.dataset.os === os));
+    document.querySelectorAll('.os').forEach(s => s.classList.toggle('on', s.id === os));
+    if (location.hash !== '#' + os) history.replaceState(null, '', '#' + os);
+  }
+  tabs.forEach(t => t.onclick = () => pick(t.dataset.os));
+  addEventListener('hashchange', () => { const h = location.hash.slice(1); if (['windows', 'mac', 'linux'].includes(h)) pick(h); });
+  const ua = navigator.userAgent, fromHash = location.hash.slice(1);
+  pick(['windows', 'mac', 'linux'].includes(fromHash) ? fromHash : /Mac/i.test(ua) && !/iPhone|iPad/i.test(ua) ? 'mac' : /Linux/i.test(ua) && !/Android/i.test(ua) ? 'linux' : 'windows');
+  document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+    const t = document.getElementById(b.dataset.copy).textContent;
+    try { await navigator.clipboard.writeText(t); b.textContent = 'Copied'; } catch { const r = document.createRange(); r.selectNodeContents(document.getElementById(b.dataset.copy)); getSelection().removeAllRanges(); getSelection().addRange(r); b.textContent = 'Press Ctrl+C'; }
+    setTimeout(() => { b.textContent = 'Copy'; }, 1600);
+  });
+</script>
+</body>
+</html>

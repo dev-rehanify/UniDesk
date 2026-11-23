@@ -77,7 +77,7 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 
 ## Download & run
 
-**Option A: download** the latest build from [Releases](https://github.com/dev-rehanify/UniDesk/releases/latest):
+**Option A: download.** Follow the [step-by-step install guide](https://dev-rehanify.github.io/UniDesk/install.html): it shows how to turn off the safety check that blocks new apps on your system, how to confirm it is off, and then gives you the download. Or grab the files directly from [Releases](https://github.com/dev-rehanify/UniDesk/releases/latest):
 
 - **Windows:** `UniDesk-x.y.z-win-x64.exe` (installer) or the `.zip` (portable)
 - **macOS:** `UniDesk-x.y.z-mac-arm64.dmg` (Apple Silicon) or `-mac-x64.dmg` (Intel)

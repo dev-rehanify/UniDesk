@@ -79,7 +79,9 @@ check('remote terminal runs commands', !!termOk, String(await B(`$('termOut').te
 const recv = path.join(os.homedir(), 'Downloads', 'UniDesk', 'ci-linux.txt'); fs.rmSync(recv, { force: true });
 await B(`sendFiles([new File(['hello from the visitor'], 'ci-linux.txt')]); true`);
 const got = await until(() => fs.existsSync(recv) && fs.readFileSync(recv, 'utf8') === 'hello from the visitor', 15000);
-check('file transfer lands on the host', !!got, recv);
+let where = '';
+try { where = execFileSync('find', [os.homedir(), '/tmp', '-name', 'ci-linux*.txt', '-newer', app], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) { where = String(e.stdout || '').trim(); }
+check('file transfer lands on the host', !!got, got ? recv : 'expected ' + recv + ' | found: ' + (where || 'nowhere') + ' | downloads dir: ' + (process.env.XDG_DOWNLOAD_DIR || 'unset'));
 
 // 6. Remote PC info panel
 const info = await B(`piAsk('info', {}).then(r => r.info ? r.info.os + ' | disks ' + r.info.disks.length + ' | cpu ' + r.info.cpuPct + '%' : r.error)`);

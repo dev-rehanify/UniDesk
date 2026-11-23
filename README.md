@@ -79,14 +79,14 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 
 **Option A: download** the latest build from [Releases](https://github.com/dev-rehanify/UniDesk/releases/latest):
 
-- **Windows:** `UniDesk-x.y.z-win-x64.zip` (portable: unzip and run `UniDesk.exe`; **works even with Smart App Control on**) or `UniDesk-x.y.z-win-x64.exe` (installer, starts as administrator)
+- **Windows:** `UniDesk-x.y.z-win-x64.exe` (installer) or the `.zip` (portable)
 - **macOS:** `UniDesk-x.y.z-mac-arm64.dmg` (Apple Silicon) or `-mac-x64.dmg` (Intel)
 - **Linux:** `UniDesk-x.y.z-linux-x64.AppImage`: run `chmod +x UniDesk-*.AppImage` and open it. Tested on Ubuntu 26.04 (X11); Wayland is not tested yet.
 - **Phone or tablet:** no install needed. Open the [mobile viewer](https://dev-rehanify.github.io/UniDesk/m/) in Safari or Chrome, enter your computer's address and connect. Add it to your home screen to use it like an app.
 
 > **Builds aren't code-signed yet**, so your system may warn you the first time:
 > - **Windows SmartScreen** ("Windows protected your PC"): click **More info** → **Run anyway**.
-> - **Windows Smart App Control** ("blocked an app that may be unsafe"): use the **portable `.zip`**. It runs on Electron's official, widely recognised program file (left unchanged), so Smart App Control lets it run. The installer is blocked on these PCs. The zip starts as a normal app; use **Settings → Restart as admin** for admin-only extras (controlling admin windows and UAC prompts).
+> - **Windows Smart App Control** ("blocked an app that may be unsafe"): it has no "run anyway" button and no per-app exception. Unsigned apps can only run if Smart App Control is turned off (Windows Security → App & browser control → Smart App Control settings). Most PCs don't have it on. The [mobile viewer](https://dev-rehanify.github.io/UniDesk/m/) works without installing anything.
 > - **macOS 15 Sequoia and later**: open UniDesk once, then go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** (right-click → Open no longer works). Then allow **Screen Recording** and **Accessibility** there so others can see and control your Mac.
 > - **Linux**: run `chmod +x UniDesk-*.AppImage` first.
 

@@ -708,3 +708,7 @@ html.tab-mode .titlebar { display: none; }
 html.tab-mode #home .grid { grid-template-columns: 1fr; max-width: 560px; }
 html.tab-mode #home .grid > .card:first-child { display: none; }
 html.tab-mode #home .features { display: none; }
+
+/* keyboard focus: a clear ring on buttons and tabs, and hover-only actions also show when focused */
+button:focus-visible, .tab:focus-visible, a:focus-visible, .swatch:focus-visible { outline: 2px solid var(--a1); outline-offset: 2px; }
+.desk:focus-within .desk-acts, .sn-item:focus-within .fb-act, .fb-row:focus-within .fb-act { opacity: 1; }

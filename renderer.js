@@ -356,7 +356,7 @@ function connect(idArg, isRetry) {
   if (!isRetry) { reconnectTries = 0; inSession = false; }
   const id = String(idArg || $('remoteId').value).replace(/\D/g, '');
   if (id.length !== 9) return hint('Addresses are 9 digits.');
-  if (id === myId) return hint("That's your own address.");
+  if (id === myId) return hint('That’s your own address.');
   if (role) return;
   $('connHint').textContent = '';
   role = 'viewer'; viewerTarget = id; authTriedSaved = false; pendingPw = null; authCh = null;
@@ -1018,7 +1018,7 @@ $('pwSave').onclick = async () => {
   const a = $('pw1').value, b = $('pw2').value;
   if (a.length < 8) return ($('pwErr').textContent = 'Use at least 8 characters.');
   if (pwStrength(a) < 2) return ($('pwErr').textContent = 'Too easy to guess: mix letters, numbers and symbols.');
-  if (a !== b) return ($('pwErr').textContent = "The passwords don't match.");
+  if (a !== b) return ($('pwErr').textContent = 'The passwords don’t match.');
   const r = await window.dw.authSet(a);
   if (!r.ok) return ($('pwErr').textContent = r.error);
   closePwDialog(); S.unattended = true; saveSettings(); applyAll(); refreshAuthUi();
@@ -1874,7 +1874,7 @@ async function openTab(target) {
   const id = await window.dw.tabOpen(target || '');
   if (!id) toast('You can have up to 8 extra tabs', 2200);
 }
-let tabsState = { active: 0, list: [] }, lastShownTab = null;
+let tabsState = { active: 0, list: [] }, lastShownTab = null, lastStripKey = '';
 function deskLabel(id) { const d = readDesks().find(x => x.id === id); return d?.name || fmt(id); }
 function homeTabTitle() {
   if (role === 'viewer' && viewerTarget) return deskLabel(viewerTarget);
@@ -1886,8 +1886,12 @@ function renderTabs() {
   const strip = $('tabStrip'), s = tabsState;
   const show = s.list.length > 0 || role === 'viewer';
   strip.hidden = !show; document.body.classList.toggle('has-tabs', show);
-  if (!show) return;
+  if (!show) { lastStripKey = ''; return; }
   const live = role === 'viewer' || role === 'host';
+  // rebuild only when something changed, so keyboard focus and hover stay put
+  const key = JSON.stringify([s.active, s.list, homeTabTitle(), live]);
+  if (key === lastStripKey) return;
+  lastStripKey = key;
   const item = (id, title, isLive, closable) => {
     const b = document.createElement('div'); b.className = 'tab' + (s.active === id ? ' on' : '') + (isLive ? ' is-live' : ''); b.dataset.id = id; b.title = title; b.setAttribute('role', 'tab');
     b.innerHTML = '<span class="tab-dot"></span><span class="tab-t"></span>' + (closable ? '<button class="tab-x" title="Close tab" aria-label="Close tab">✕</button>' : '');
@@ -1895,6 +1899,9 @@ function renderTabs() {
     b.onclick = (e) => { if (e.target.closest('.tab-x')) return; window.dw.tabSelect(id); };
     if (closable) b.querySelector('.tab-x').onclick = (e) => { e.stopPropagation(); closeTabAsk(id, isLive, title); };
     b.onauxclick = (e) => { if (e.button === 1 && closable) closeTabAsk(id, isLive, title); };
+    // keyboard: Tab to reach it, Enter or Space to open it
+    b.tabIndex = 0; b.setAttribute('aria-selected', String(s.active === id));
+    b.onkeydown = (e) => { if (e.target === b && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); window.dw.tabSelect(id); } };
     return b;
   };
   strip.innerHTML = '';
@@ -1962,6 +1969,7 @@ function fbButtons() {
 function fbAskOpen(mode, entry) {
   fbMode = mode; fbTarget = entry || null;
   $('fbAskOk').textContent = mode === 'rename' ? 'Rename' : 'Create';
+  $('fbAskIn').setAttribute('aria-label', mode === 'rename' ? 'New name' : 'New folder name');
   $('fbAskIn').value = mode === 'rename' ? entry.name : 'New folder';
   $('fbAsk').classList.add('show');
   const inp = $('fbAskIn'); inp.focus();

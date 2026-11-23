@@ -113,7 +113,7 @@
         <div class="recents-head"><svg class="ic sm"><use href="#i-wifi"/></svg>On your network</div>
         <div id="nearby" class="nearby"></div>
       </div>
-      <div class="recents-head"><svg class="ic sm"><use href="#i-clock"/></svg><span id="recentsTitle">Recent</span></div>
+      <div class="recents-head"><svg class="ic sm"><use href="#i-clock"/></svg><span id="recentsTitle">Recent</span><input class="desk-search" id="deskSearch" placeholder="Search desks" spellcheck="false" autocomplete="off" hidden></div>
       <div id="recents" class="recents"><span class="empty">No recent sessions yet</span></div>
     </section>
   </div>
@@ -159,7 +159,7 @@
       <select id="quality"><option value="speed">Speed</option><option value="balanced" selected>Balanced</option><option value="quality">Best quality</option></select>
     </div>
     <div class="tb-select" title="Send shortcut"><svg class="ic"><use href="#i-key"/></svg>
-      <select id="combo"><option value="">Keys</option><option value="tm">Ctrl+Shift+Esc</option><option value="win">Start menu</option><option value="alttab">Alt+Tab</option><option value="desk">Show desktop</option><option value="run">Run (Win+R)</option><option value="lock">Lock (Win+L)</option><option value="explorer">File Explorer (Win+E)</option><option value="settings">Windows Settings (Win+I)</option><option value="cad">Ctrl+Alt+Del</option><option value="typeclip">⌨ Type my clipboard</option><option value="sleep">☾ Sleep PC</option><option value="signout">⇥ Sign out user</option><option value="shutdown">⏻ Shut down PC</option><option value="openurl">🔗 Open a link there…</option><option value="reboot">⟳ Restart PC &amp; reconnect</option></select>
+      <select id="combo"><option value="">Keys</option><option value="tm">Ctrl+Shift+Esc</option><option value="win">Start menu</option><option value="alttab">Alt+Tab</option><option value="desk">Show desktop</option><option value="run">Run (Win+R)</option><option value="lock">Lock (Win+L)</option><option value="explorer">File Explorer (Win+E)</option><option value="settings">Windows Settings (Win+I)</option><option value="cad">Ctrl+Alt+Del</option><option value="typeclip">⌨ Type my clipboard</option><option value="sleep">☾ Sleep PC</option><option value="signout">⇥ Sign out user</option><option value="shutdown">⏻ Shut down PC</option><option value="snippets">✎ Text snippets…</option><option value="openurl">🔗 Open a link there…</option><option value="reboot">⟳ Restart PC &amp; reconnect</option></select>
     </div>
     <button class="tb" id="scaleBtn" title="Fit to window / actual size"><svg class="ic"><use href="#i-zoom"/></svg><span id="scaleLabel">Fit</span></button>
     <button class="tb" id="drawBtn" title="Draw on their screen"><svg class="ic"><use href="#i-pen"/></svg><span class="pen-dot" id="penColor" title="Change pen colour"></span></button>
@@ -354,6 +354,8 @@
             <button class="btn-soft danger" id="newIdBtn"><span>New address</span></button></div>
           <div class="row"><svg class="ic"><use href="#i-clock"/></svg><div class="txt"><b>Recent connections</b><span>Shown on the home screen</span></div>
             <button class="btn-soft" id="clearRecents">Clear</button></div>
+          <div class="row"><svg class="ic"><use href="#i-users"/></svg><div class="txt"><b>Address book backup</b><span>Save your desks (names, pins, Wake-on-LAN) to a file, or bring them in from another PC. Passwords are never included.</span></div>
+            <button class="btn-soft" id="deskExport">Export</button><button class="btn-soft" id="deskImport" style="margin-left:6px">Import</button></div>
           <div class="row"><svg class="ic"><use href="#i-key"/></svg><div class="txt"><b>Saved desk passwords</b><span>Passwords you chose to remember for other desks</span></div>
             <button class="btn-soft" id="forgetSaved">Forget all</button></div>
         </div>
@@ -475,6 +477,11 @@
 </aside>
 
 <!-- ============ TASK MANAGER ============ -->
+<aside id="sn" class="fb sn">
+  <div class="chat-head"><svg class="ic"><use href="#i-pen"/></svg>Text snippets<button class="icon-btn" id="snClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <form class="sn-add" id="snAdd"><input id="snName" placeholder="Name (optional)" maxlength="60" autocomplete="off"><textarea id="snText" placeholder="Text to type on their PC, like a command or an email address" maxlength="5000" spellcheck="false"></textarea><button class="btn-soft" type="submit">Save snippet</button></form>
+  <div class="fb-list" id="snList"></div>
+</aside>
 <aside id="pi" class="fb pi">
   <div class="chat-head"><svg class="ic"><use href="#i-info"/></svg>Remote PC info<button class="icon-btn" id="piClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
   <form class="pi-url" id="piUrl"><svg class="ic sm"><use href="#i-link"/></svg><input id="piUrlIn" placeholder="Open a link on their PC: example.com" spellcheck="false" autocomplete="off" maxlength="2048"><button class="btn-soft" type="submit">Open</button></form>

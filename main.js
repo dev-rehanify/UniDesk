@@ -659,6 +659,18 @@ ipcMain.handle('fs-read', async (_e, f, offset, len) => {
   finally { await fh.close(); }
 });
 
+// Address book backup: save to / load from a .json file the user picks
+ipcMain.handle('desks-export', async (_e, text) => {
+  const r = await dialog.showSaveDialog(win, { title: 'Export address book', defaultPath: path.join(app.getPath('documents'), 'UniDesk address book.json'), filters: [{ name: 'UniDesk address book', extensions: ['json'] }] });
+  if (r.canceled || !r.filePath) return null;
+  try { fs.writeFileSync(r.filePath, String(text)); return r.filePath; } catch { return { error: 'Couldn’t save the file' }; }
+});
+ipcMain.handle('desks-import', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Import address book', properties: ['openFile'], filters: [{ name: 'UniDesk address book', extensions: ['json'] }] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  try { const st = fs.statSync(r.filePaths[0]); if (st.size > 2 * 1024 * 1024) return { error: 'That file is too big to be an address book' }; return { text: fs.readFileSync(r.filePaths[0], 'utf8') }; } catch { return { error: 'Couldn’t read the file' }; }
+});
+
 // Remembered passwords for desks you connect to, encrypted with Windows DPAPI via safeStorage
 const savedFile = () => path.join(app.getPath('userData'), 'saved-desks.json');
 const readSaved = () => { try { return JSON.parse(fs.readFileSync(savedFile(), 'utf8')); } catch { return {}; } };

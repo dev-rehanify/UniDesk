@@ -74,6 +74,8 @@ contextBridge.exposeInMainWorld('dw', {
   blockInput: (on) => ipcRenderer.invoke('block-input', on),
   power: (what) => ipcRenderer.invoke('power', what),
   sysinfoFull: () => ipcRenderer.invoke('sysinfo-full'),
+  desksExport: (text) => ipcRenderer.invoke('desks-export', text),
+  desksImport: () => ipcRenderer.invoke('desks-import'),
   openUrl: (u) => ipcRenderer.invoke('open-url', u),
   recInStart: (name) => ipcRenderer.invoke('rec-in-start', name),
   recInOpen: () => ipcRenderer.send('rec-in-open'),

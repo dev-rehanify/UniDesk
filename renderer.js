@@ -648,7 +648,7 @@ function endAll(opts = {}) {
   $('recBadge').classList.remove('show');
   if (wasHost || hostBlock) { hostBlock = false; clearInterval(blockWatch); window.dw.blockInput(false); }
   setBlockBtn(false); $('blockBtn').style.display = 'none'; clearInterval(hbTimer);
-  togglePi(false); $('piBtn').style.display = 'none'; $('piBody').innerHTML = '';
+  togglePi(false); $('piBtn').style.display = 'none'; $('piBody').innerHTML = ''; toggleSn(false);
   if (wasHost || hostPrivacy) { hostPrivacy = false; window.dw.privacy(false); }
   setPrivBtn(false); $('privBtn').style.display = 'none'; fbAskClose();
   hostPaused = false; $('pauseBtn').classList.remove('on'); $('pauseLabel').textContent = 'Pause'; setPausedView(false); toggleBrowse(false); $('browseBtn').style.display = 'none'; toggleTm(false);
@@ -757,6 +757,8 @@ $('combo').onchange = async (e) => {
     if (!text) toast('Your clipboard is empty', 1600);
     else if (!control || remotePerms.control === false) toast('Remote control is off', 1600);
     else { sendInput({ t: 'type', text: text.slice(0, 5000) }); toast(`Typing ${Math.min(text.length, 5000)} characters…`, 1600); }
+  } else if (v === 'snippets') {
+    toggleSn(true);
   } else if (v === 'openurl') {
     if (!control || remotePerms.control === false) toast('Remote control is off', 1600);
     else { togglePi(true); setTimeout(() => $('piUrlIn').focus(), 350); }
@@ -788,11 +790,15 @@ function readDesks() {
 }
 function writeDesks(d) { try { localStorage.setItem('ud-desks', JSON.stringify(d)); } catch {} loadRecents(); }
 function loadRecents() {
-  const d = readDesks().sort((a, b) => (b.fav - a.fav) || (b.last - a.last));
+  const all = readDesks().sort((a, b) => (b.fav - a.fav) || (b.last - a.last));
   const box = $('recents'); box.innerHTML = '';
-  $('recentsTitle').textContent = d.some(x => x.fav) ? 'Desks' : 'Recent';
-  if (!d.length) { box.innerHTML = '<span class="empty">No saved desks yet</span>'; return; }
-  d.slice(0, 8).forEach((x, i) => {
+  $('recentsTitle').textContent = all.some(x => x.fav) ? 'Desks' : 'Recent';
+  const q = $('deskSearch').value.trim().toLowerCase(), qd = q.replace(/\D/g, '');
+  $('deskSearch').hidden = all.length < 5 && !q;
+  const d = q ? all.filter(x => (x.name || '').toLowerCase().includes(q) || (qd && x.id.includes(qd))) : all;
+  if (!all.length) { box.innerHTML = '<span class="empty">No saved desks yet</span>'; return; }
+  if (!d.length) { box.innerHTML = '<span class="empty">No desks match your search</span>'; return; }
+  d.slice(0, q ? 30 : 8).forEach((x, i) => {
     const el = document.createElement('div'); el.className = 'desk' + (x.fav ? ' fav' : ''); el.style.animationDelay = i * 40 + 'ms';
     el.innerHTML = `<button class="desk-main" title="Connect"><span class="desk-av">${(x.name || '#')[0].toUpperCase()}</span>
         <span class="desk-txt"><b></b><small class="mono">${fmt(x.id)}</small></span></button>
@@ -815,7 +821,7 @@ function loadRecents() {
 function saveRecent(id) {
   const all = readDesks(); const t = all.find(x => x.id === id);
   if (t) t.last = Date.now(); else all.push({ id, name: '', fav: false, last: Date.now() });
-  const keep = all.sort((a, b) => (b.fav - a.fav) || (b.last - a.last)).filter((x, i) => x.fav || i < 12);
+  const keep = all.sort((a, b) => (b.fav - a.fav) || (b.last - a.last)).filter((x, i) => x.fav || x.name || x.mac || i < 12);
   writeDesks(keep);
 }
 function nameDeskIfUnnamed(id, name) {
@@ -1605,6 +1611,83 @@ function onPrivacyReply(m) {
   else if (!m.on && was) toast(m.local ? 'Your partner turned the privacy screen off' : 'Privacy screen off', 2200);
 }
 window.dw.onPrivacyEnded(() => { if (!hostPrivacy) return; hostPrivacy = false; send({ t: 'privacy-r', on: false, local: true }); toast('Your screen is visible again', 2000); });
+
+// ================= ADDRESS BOOK SEARCH & BACKUP =================
+$('deskSearch').addEventListener('input', loadRecents);
+$('deskSearch').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.target.value = ''; loadRecents(); }
+  if (e.key === 'Enter') { const first = $('recents').querySelector('.desk-main'); if (first) first.click(); }
+});
+function exportDesksData() {
+  const desks = readDesks().map(x => ({ id: x.id, name: x.name || '', fav: !!x.fav, last: x.last || 0, ...(x.mac ? { mac: x.mac } : {}) }));
+  return JSON.stringify({ app: 'UniDesk', kind: 'address-book', version: 1, exported: new Date().toISOString(), desks }, null, 2);
+}
+// Merge an exported address book into this one; returns how many desks were added / updated
+function importDesksData(text) {
+  let data; try { data = JSON.parse(text); } catch { return { error: 'That file isn’t a UniDesk address book' }; }
+  const list = Array.isArray(data) ? data : data?.desks;
+  if (!Array.isArray(list)) return { error: 'That file isn’t a UniDesk address book' };
+  const all = readDesks(); let added = 0, updated = 0;
+  for (const raw of list.slice(0, 2000)) {
+    const id = String(raw?.id ?? '').replace(/\D/g, ''); if (id.length !== 9) continue;
+    const name = String(raw.name || '').slice(0, 60), mac = /^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(raw.mac || '') ? raw.mac : undefined;
+    const t = all.find(x => x.id === id);
+    if (!t) { all.push({ id, name, fav: !!raw.fav, last: Number(raw.last) || 0, ...(mac ? { mac } : {}) }); added++; continue; }
+    let ch = false;
+    if (name && !t.name) { t.name = name; ch = true; }
+    if (raw.fav && !t.fav) { t.fav = true; ch = true; }
+    if (mac && !t.mac) { t.mac = mac; ch = true; }
+    if (ch) updated++;
+  }
+  writeDesks(all); return { added, updated };
+}
+$('deskExport').onclick = async () => {
+  const n = readDesks().length; if (!n) return toast('Your address book is empty', 1800);
+  const r = await window.dw.desksExport(exportDesksData());
+  if (r?.error) toast(r.error, 2400); else if (r) { toast(`Exported ${n} desk${n === 1 ? '' : 's'}`, 2000); window.dw.showFile(r); }
+};
+$('deskImport').onclick = async () => {
+  const f = await window.dw.desksImport(); if (!f) return;
+  if (f.error) return toast(f.error, 2400);
+  const r = importDesksData(f.text);
+  toast(r.error || (r.added || r.updated ? `Added ${r.added} desk${r.added === 1 ? '' : 's'}${r.updated ? `, updated ${r.updated}` : ''}` : 'Nothing new: you already have all those desks'), 2600);
+};
+
+// ================= TEXT SNIPPETS =================
+// Saved texts the visitor can type on the remote PC with one click (stored only on this PC).
+const readSn = () => { try { const v = JSON.parse(localStorage.getItem('ud-snippets') || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+const writeSn = (v) => { try { localStorage.setItem('ud-snippets', JSON.stringify(v.slice(0, 200))); } catch {} renderSn(); };
+function renderSn() {
+  const list = readSn(), box = $('snList'); box.innerHTML = '';
+  if (!list.length) { box.innerHTML = '<div class="fb-msg">No snippets yet. Save text you type often, like a command or an email address.</div>'; return; }
+  list.forEach((s) => {
+    const el = document.createElement('div'); el.className = 'sn-item';
+    el.innerHTML = '<div class="t"><b></b><small></small></div><button class="btn-soft" data-a="type">Type</button><span class="fb-act del" data-a="del" title="Delete"><svg class="ic"><use href="#i-trash"/></svg></span>';
+    el.querySelector('b').textContent = s.name || s.text.split('\n')[0].slice(0, 40);
+    el.querySelector('small').textContent = s.text.replace(/\s+/g, ' ').slice(0, 90);
+    el.querySelector('[data-a=type]').onclick = () => typeSnippet(s);
+    el.querySelector('[data-a=del]').onclick = () => { writeSn(readSn().filter(x => x.id !== s.id)); toast('Snippet deleted', 1400); };
+    box.appendChild(el);
+  });
+}
+function typeSnippet(s) {
+  if (role !== 'viewer' || !conn) return toast('Connect to a desk first', 1600);
+  if (!control || remotePerms.control === false) return toast('Remote control is off', 1600);
+  sendInput({ t: 'type', text: s.text.slice(0, 5000) }); toast(`Typing ${s.name || 'snippet'}…`, 1600);
+  $('stage').focus();
+}
+function toggleSn(force) {
+  const open = $('sn').classList.toggle('open', force);
+  if (open) renderSn();
+}
+$('snClose').onclick = () => toggleSn(false);
+['snName', 'snText', 'piUrlIn'].forEach(id => $(id).addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') { if (id === 'piUrlIn') togglePi(false); else toggleSn(false); } if (e.key === 'Enter' && id === 'snText' && (e.ctrlKey || e.metaKey)) $('snAdd').requestSubmit(); }));
+$('snAdd').onsubmit = (e) => {
+  e.preventDefault();
+  const text = $('snText').value; if (!text.trim()) return $('snText').focus();
+  writeSn([{ id: crypto.randomUUID(), name: $('snName').value.trim().slice(0, 60), text: text.slice(0, 5000) }, ...readSn()]);
+  $('snName').value = ''; $('snText').value = ''; toast('Snippet saved', 1400);
+};
 
 // ================= REMOTE PC INFO & OPEN A LINK =================
 // Needs the control permission on the host, like the task manager.

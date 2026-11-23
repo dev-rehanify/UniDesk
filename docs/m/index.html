@@ -76,7 +76,7 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
 .bar button.on { color: var(--text); background: rgba(123,92,255,.22); }
 .bar button.end { color: var(--bad); }
 #kb { position: fixed; left: -200px; top: 0; width: 120px; height: 40px; opacity: 0; font-size: 16px; }
-.toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(10px); padding: 10px 16px; border-radius: 12px; background: rgba(20,24,40,.95); border: 1px solid var(--stroke); font-size: 13.5px; opacity: 0; transition: .25s; z-index: 40; pointer-events: none; max-width: 90vw; text-align: center; }
+.toast { position: fixed; left: 50%; top: calc(56px + env(safe-area-inset-top)); transform: translateX(-50%) translateY(-10px); padding: 10px 16px; border-radius: 12px; background: rgba(20,24,40,.95); border: 1px solid var(--stroke); font-size: 13.5px; opacity: 0; transition: .25s; z-index: 40; pointer-events: none; max-width: 90vw; text-align: center; }
 .toast.on { opacity: 1; transform: translateX(-50%); }
 .send { text-align: left !important; }
 .send h3 { text-align: center; margin-bottom: 12px !important; }
@@ -87,6 +87,25 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
 .prog.on { display: block; }
 .prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--a1), var(--a2)); transition: width .2s; }
 .prog-txt { min-height: 18px; margin-top: 6px; font-size: 12.5px; color: var(--mute); text-align: center; }
+.bar button { position: relative; }
+.dot { position: absolute; top: 4px; right: calc(50% - 16px); width: 8px; height: 8px; border-radius: 50%; background: var(--bad); display: none; }
+.dot.on { display: block; }
+.chat h3 { margin-bottom: 10px !important; }
+.chat-log { height: min(46vh, 360px); overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; text-align: left; }
+.chat-empty { margin: auto; color: var(--mute); font-size: 13px; text-align: center; }
+.msg { max-width: 82%; padding: 8px 12px; border-radius: 14px; font-size: 14px; background: rgba(255,255,255,.08); align-self: flex-start; overflow-wrap: anywhere; white-space: pre-wrap; }
+.msg.mine { align-self: flex-end; background: linear-gradient(135deg, var(--a1), var(--a2)); }
+.chat-in { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 10px; }
+.chat-in .go { margin: 0; width: auto; padding: 0 18px; height: 50px; }
+.inbox { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 6; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.inbox-item { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: rgba(20,24,40,.94); border: 1px solid var(--stroke); box-shadow: 0 12px 30px -12px rgba(0,0,0,.8); animation: pop .3s cubic-bezier(.2,1.3,.4,1); }
+.inbox-item .tx { flex: 1; min-width: 0; font-size: 13px; }
+.inbox-item .tx b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inbox-item .tx small { display: block; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inbox-item button, .inbox-item a { flex: none; height: 34px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--a1); color: #fff; font-weight: 650; font-size: 13px; text-decoration: none; display: grid; place-items: center; }
+.inbox-item .x { background: transparent; color: var(--mute); padding: 0 6px; font-size: 18px; }
+.inbox-item .bar2 { height: 4px; margin-top: 6px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
+.inbox-item .bar2 i { display: block; height: 100%; width: 0; background: var(--a1); }
 .help { margin: 10px 0 0; padding: 0; list-style: none; color: var(--mute); font-size: 13px; text-align: left; display: grid; gap: 4px; }
 .help b { color: var(--text); font-weight: 600; }
 </style>
@@ -117,8 +136,10 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
     <div id="cursor"></div>
     <div class="chip" id="chip">Connecting…</div>
     <div class="paused" id="paused">Your partner paused sharing</div>
+    <div class="inbox" id="inbox"></div>
   </div>
   <div class="keys" id="keys">
+    <button id="hdBtn">HD</button><button id="scrBtn" style="display:none"><span id="scrTxt">Screen 1</span></button>
     <button data-k="Escape">Esc</button><button data-k="Tab">Tab</button>
     <button data-mod="ControlLeft">Ctrl</button><button data-mod="AltLeft">Alt</button><button data-mod="ShiftLeft">Shift</button>
     <button data-k="MetaLeft">Win</button>
@@ -131,8 +152,7 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
     <button id="kbBtn"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 15h10"/></svg>Keyboard</button>
     <button id="keysBtn"><svg viewBox="0 0 24 24"><path d="M15 7a4 4 0 1 1-3.9 4.9L3 20l-1-1 1-3 2 1 1-2 2 1 2.1-2.1A4 4 0 0 1 15 7z"/></svg>Keys</button>
     <button id="sendBtn"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Send</button>
-    <button id="scrBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span id="scrTxt">Screen 1</span></button>
-    <button id="hdBtn"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4z"/><path d="M8 10v4M8 12h3M11 10v4M14 10v4h1.5a2 2 0 0 0 0-4z"/></svg>HD</button>
+    <button id="chatBtn"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>Chat<i class="dot" id="chatDot"></i></button>
     <button id="endBtn" class="end"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>End</button>
   </nav>
   <textarea id="kb" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
@@ -152,6 +172,12 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
   <div class="row2"><button class="ghost" id="clipBtn" type="button">Copy to PC clipboard</button><button class="ghost" id="typeBtn" type="button">Type it on the PC</button></div>
   <button class="ghost" id="sendClose" type="button">Close</button>
 </div></div>
+<div class="sheet" id="chatSheet"><div class="card chat">
+  <h3>Chat</h3>
+  <div class="chat-log" id="chatLog"><div class="chat-empty">Messages with the person at the PC appear here.</div></div>
+  <form class="chat-in" id="chatForm" autocomplete="off"><input class="pw" id="chatIn" placeholder="Message" maxlength="2000"><button class="go" type="submit">Send</button></form>
+  <button class="ghost" id="chatClose" type="button">Close</button>
+</div></div>
 <div class="toast" id="toast"></div>
 
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" integrity="sha384-x0YgkOr/3UOZP2CRDxGW9e0Q+2Qjyr3uJrm4xU32Y7ZCNAo7Cc7bjhrZMi/dwczu" crossorigin="anonymous"></script>
@@ -165,7 +191,7 @@ const fmt = (id) => String(id).replace(/(\d{3})(?=\d)/g, '$1 ');
 let toastT; function toast(m, ms = 2200) { const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 function show(v) { document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === v)); }
-function sheet(id) { ['waitSheet', 'pwSheet', 'sendSheet'].forEach(s => $(s).classList.toggle('on', s === id)); }
+function sheet(id) { ['waitSheet', 'pwSheet', 'sendSheet', 'chatSheet'].forEach(s => $(s).classList.toggle('on', s === id)); }
 
 // ---------- identity & signaling ----------
 let peer = null, myId = store.get('udm-id', null), conn = null, call = null, target = null, auth = null, inSession = false, connectTimer = null;
@@ -240,6 +266,8 @@ function fail(msg) {
   clearTimeout(connectTimer);
   try { call?.close(); } catch {} try { conn?.close(); } catch {}
   call = conn = null; target = null; inSession = false;
+  $('inbox').innerHTML = ''; incoming.clear(); ciParts.clear(); pcClip = '';
+  $('chatLog').innerHTML = '<div class="chat-empty">Messages with the person at the PC appear here.</div>'; unread = 0; $('chatDot').classList.remove('on');
   sheet(null); show('home'); $('hint').textContent = msg;
 }
 function dropped() {
@@ -303,7 +331,12 @@ function wire(c) {
       case 'paused': $('paused').classList.toggle('on', !!m.on); break;
       case 'screens': screens = m.list || []; curScreen = m.cur || 0; renderScr(); break;
       case 'screen': curScreen = m.i; renderScr(); toast('Now viewing Screen ' + (m.i + 1), 1500); break;
-      case 'chat': toast('💬 ' + String(m.text || '').slice(0, 140), 4000); break;
+      case 'chat': addChat(String(m.text || ''), false); break;
+      case 'clip': if (typeof m.text === 'string') onPcClip(m.text); break;
+      case 'ci': onPcClipImage(m); break;
+      case 'file-start': onFileStart(m); break;
+      case 'file-chunk': onFileChunk(m); break;
+      case 'file-end': onFileEnd(m); break;
     }
   });
 }
@@ -452,7 +485,7 @@ $('kbBtn').onclick = () => {
 };
 $('keysBtn').onclick = () => { const on = $('keys').classList.toggle('on'); $('keysBtn').classList.toggle('on', on); };
 $('keys').addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
+  const b = e.target.closest('button'); if (!b || !(b.dataset.k || b.dataset.mod || b.dataset.combo || b.dataset.cad)) return;
   if (!canControl()) return toast('View only: your partner turned off control', 2000);
   if (b.dataset.mod) { const m = b.dataset.mod; mods.has(m) ? mods.delete(m) : mods.add(m); b.classList.toggle('on', mods.has(m)); return; }
   if (b.dataset.cad) { input({ t: 'cad' }); toast('Sent Ctrl+Alt+Del', 1600); return; }
@@ -462,6 +495,77 @@ $('keys').addEventListener('click', (e) => {
     else key(b.dataset.k);
   }
 });
+// ---------- things that arrive from the PC: files, its clipboard (text or image) ----------
+function inboxItem(key, html, ttl) {
+  const box = $('inbox'); let el = key && box.querySelector(`[data-key="${key}"]`);
+  if (!el) { el = document.createElement('div'); el.className = 'inbox-item'; if (key) el.dataset.key = key; box.appendChild(el); }
+  el.innerHTML = html; clearTimeout(el._t);
+  const x = document.createElement('button'); x.className = 'x'; x.setAttribute('aria-label', 'Dismiss'); x.textContent = '×'; x.onclick = () => el.remove(); el.appendChild(x);
+  if (ttl) el._t = setTimeout(() => el.remove(), ttl);
+  while (box.children.length > 3) box.firstElementChild.remove();
+  return el;
+}
+const escH = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const sizeTxt = (n) => n < 1024 ? n + ' B' : n < 1048576 ? Math.round(n / 1024) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+let pcClip = '';
+function onPcClip(text) {
+  if (!text || text === pcClip) return; pcClip = text;
+  const el = inboxItem('clip', `<span class="tx"><b>The PC copied text</b><small>${escH(text.replace(/\s+/g, ' ').slice(0, 80))}</small></span><button class="cp">Copy</button>`, 30000);
+  el.querySelector('.cp').onclick = async () => {
+    try { await navigator.clipboard.writeText(pcClip); toast('Copied to your phone', 1500); el.remove(); }
+    catch { toast('Your browser didn’t allow copying', 2000); }
+  };
+}
+const ciParts = new Map();
+function onPcClipImage(m) {
+  let e = ciParts.get(m.id); if (!e) { e = { parts: new Array(m.n), got: 0 }; ciParts.set(m.id, e); }
+  if (e.parts[m.i] === undefined) { e.parts[m.i] = m.d; e.got++; }
+  if (e.got < m.n) return;
+  ciParts.delete(m.id); pcClip = '';   // an image replaced the PC's text, so the same text copied again must show again
+  const bin = atob(e.parts.join('')), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'image/png' }), url = URL.createObjectURL(blob);
+  const el = inboxItem('clip', `<span class="tx"><b>The PC copied an image</b><small>${sizeTxt(blob.size)} · PNG</small></span><button class="cp">Copy</button><a href="${url}" download="UniDesk image.png">Save</a>`, 60000);
+  el.querySelector('.cp').onclick = async () => {
+    try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast('Image copied to your phone', 1500); }
+    catch { toast('Your browser can’t copy images: use Save', 2200); }
+  };
+}
+// files the person at the PC sends (desktop "Send file"); kept in memory, then saved with the browser's download
+const incoming = new Map(), MAX_RECV = 500 * 1024 * 1024;
+function onFileStart(m) {
+  const size = +m.size || 0, name = String(m.name || 'file').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').slice(0, 120) || 'file';
+  if (size > MAX_RECV) { inboxItem(null, `<span class="tx"><b>${escH(name)}</b><small>Too big for a phone browser (${sizeTxt(size)}). Use the desktop app.</small></span>`, 12000); incoming.set(m.id, { skip: true }); return; }
+  const el = inboxItem('f' + m.id, `<span class="tx"><b>${escH(name)}</b><small>Receiving from the PC · ${sizeTxt(size)}</small><div class="bar2"><i></i></div></span>`);
+  incoming.set(m.id, { name, size, parts: [], got: 0, el });
+}
+function onFileChunk(m) {
+  const f = incoming.get(m.id); if (!f || f.skip) return;
+  const bin = atob(m.b64 || ''), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  f.parts.push(bytes); f.got += bytes.length;
+  if (f.got > MAX_RECV) { incoming.set(m.id, { skip: true }); f.el.remove(); return; }
+  const bar = f.el.querySelector('.bar2 i'); if (bar) bar.style.width = (f.size ? Math.round(f.got / f.size * 100) : 100) + '%';
+}
+function onFileEnd(m) {
+  const f = incoming.get(m.id); incoming.delete(m.id); if (!f || f.skip) return;
+  const url = URL.createObjectURL(new Blob(f.parts)); f.parts = null;
+  const el = inboxItem('f' + m.id, `<span class="tx"><b>${escH(f.name)}</b><small>From the PC · ${sizeTxt(f.got)}</small></span><a class="sv" href="${url}" download="${escH(f.name)}">Save</a>`);
+  el.dataset.done = '1'; el.dataset.bytes = String(f.got);
+  if (navigator.vibrate) navigator.vibrate(20);
+  toast('The PC sent you “' + f.name + '”', 2200);
+}
+
+// ---------- chat ----------
+let unread = 0;
+function addChat(text, mine) {
+  if (!text) return;
+  $('chatLog').querySelector('.chat-empty')?.remove();
+  const d = document.createElement('div'); d.className = 'msg' + (mine ? ' mine' : ''); d.textContent = text.slice(0, 2000);
+  $('chatLog').appendChild(d); $('chatLog').scrollTop = 1e9;
+  if (!mine && !$('chatSheet').classList.contains('on')) { unread++; $('chatDot').classList.add('on'); toast('💬 ' + text.slice(0, 120), 3500); }
+}
+$('chatBtn').onclick = () => { if (!inSession) return; unread = 0; $('chatDot').classList.remove('on'); sheet('chatSheet'); setTimeout(() => { $('chatLog').scrollTop = 1e9; }, 50); };
+$('chatClose').onclick = () => sheet(null);
+$('chatForm').onsubmit = (e) => { e.preventDefault(); const v = $('chatIn').value.trim(); if (!v) return; send({ t: 'chat', text: v }); addChat(v, true); $('chatIn').value = ''; };
 // ---------- send files and text to the PC ----------
 // Same messages as the desktop app's file transfer and clipboard sync; the PC decides what it accepts.
 let sending = false;

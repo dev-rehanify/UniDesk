@@ -568,8 +568,12 @@ function startClipSync() {
   clipTimer = setInterval(async () => {
     if (role === 'host' ? !P.clip : (!$('clipSync').checked || remotePerms.clip === false)) return;
     const st = await window.dw.clipState(); const t = st.text;
-    if (t && t !== lastClip && t.length < 1_000_000) { lastClip = t; send({ t: 'clip', text: t }); }
-    else if (!t && st.imgHash && st.imgHash !== lastImgHash) { lastImgHash = st.imgHash; sendClipImage(); }
+    // Text and images replace each other on the clipboard, so a new one of either kind clears the memory
+    // of the other: copying image A, then text, then image A again must send A again (and the same for text).
+    if (t && t !== lastClip && t.length < 1_000_000) { lastClip = t; lastImgHash = null; send({ t: 'clip', text: t }); }
+    else if (!t && st.imgHash && st.imgHash !== lastImgHash && !ciSending) {
+      ciSending = true; try { if (await sendClipImage()) { lastImgHash = st.imgHash; lastClip = ''; } } finally { ciSending = false; }
+    }
   }, 700);
 }
 
@@ -1364,11 +1368,15 @@ $('micBtn').onclick = () => micStream ? stopVoice() : startVoice();
 $('hostMic').onclick = () => micStream ? stopVoice() : startVoice();
 
 // ================= IMAGE CLIPBOARD =================
-let lastImgHash = null; const ciParts = new Map();
+let lastImgHash = null, ciSending = false; const ciParts = new Map();
+// Returns true when the image is dealt with (sent, or too big to send); false when the clipboard
+// couldn't be read just now (another app had it open), so the sync loop tries again on its next tick.
 async function sendClipImage() {
-  const b64 = await window.dw.clipImage(); if (!b64 || b64.length > 12_000_000) return;
+  const b64 = await window.dw.clipImage(); if (!b64) return false;
+  if (b64.length > 12_000_000) return true;
   const id = Date.now(), CH = 48 * 1024, n = Math.ceil(b64.length / CH);
   for (let i = 0; i < n; i++) send({ t: 'ci', id, i, n, d: b64.slice(i * CH, (i + 1) * CH) });
+  return true;
 }
 async function onClipImageChunk(m) {
   let e = ciParts.get(m.id); if (!e) { e = { parts: new Array(m.n), got: 0 }; ciParts.set(m.id, e); }

@@ -78,7 +78,7 @@ jobs:
           path: dist
           name: unidesk-3
       - name: Install a virtual screen and test tools
-        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool libxtst6 libnss3 libasound2t64 libgbm1
+        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool libxtst6 libnss3 libasound2t64 libgbm1 xdg-user-dirs && xdg-user-dirs-update && cat ~/.config/user-dirs.dirs | grep DOWNLOAD
       - name: Test a real session between two copies
         run: |
           echo "user namespaces restricted: $(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo n/a)"

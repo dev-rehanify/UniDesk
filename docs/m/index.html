@@ -349,6 +349,13 @@ function wire(c) {
       case 'auth-locked': showPw(`Too many wrong attempts. Locked for ${m.mins} min. You can still ask to be let in.`, true); break;
       case 'denied': fail('Your partner declined the request.'); break;
       case 'busy': fail('That desk is already in a session.'); break;
+      case 'nologin': fail('Nobody is signed in to that PC yet. Connect with its unattended access password.'); break;
+      // the PC was at its sign-in screen and someone just signed in: UniDesk restarts for the user, so try again shortly
+      case 'handoff': {
+        const id = target; powerNote = 'Signed in. Reconnecting when UniDesk has started on that PC…';
+        let tries = 0; const again = () => { if (inSession || conn || ++tries > 6) { if (!inSession && !conn) $('hint').textContent = 'Signed in. Connect again when UniDesk has started on that PC.'; return; } connectTo(id); setTimeout(again, 15000); };
+        setTimeout(again, 8000); break;
+      }
       case 'blocked': fail('That desk only accepts connections from approved addresses.'); break;
       case 'bye': break;
       case 'info': remoteName = m.host || ''; chip(); if (target) saveRecent(target, remoteName); break;

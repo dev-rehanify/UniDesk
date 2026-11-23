@@ -16,6 +16,9 @@ const PREFIX = 'unidesk-';
 // Session tabs: an extra tab is this same page opened with ?tab=N (and ?target=ID to connect at once).
 const TAB = new URLSearchParams(location.search).get('tab');
 const TAB_TARGET = new URLSearchParams(location.search).get('target');
+// Before sign-in (Windows): the service runs a hidden copy of this page while nobody is signed in.
+const PRE = new URLSearchParams(location.search).get('presignin') === '1';
+let PRE_CFG = null;
 if (TAB) document.documentElement.classList.add('tab-mode');
 // The other PC sees a tab as your address plus "-xxxx"; strip that to get the address.
 let selfPeerId = '';
@@ -37,14 +40,14 @@ let screens = [], curScreen = 0, remoteScreens = [], connectTimer = null;
 
 // ================= SETTINGS & THEME =================
 const DEFAULTS = { theme: 'system', accent: 'violet', calm: false, quality: 'balanced', clip: true, stats: true, autoFull: false,
-  audio: true, allowControl: true, allowFiles: true, allowClip: true, unattended: false, otp: false, allowBrowse: false, tray: true, startup: false, lockOnEnd: 'never', idleMins: '0', maxMins: '0', lan: true, allowOnly: false, allowIds: '', hideWall: true, recIncoming: false, recKeep: '30' };
+  audio: true, allowControl: true, allowFiles: true, allowClip: true, unattended: false, otp: false, allowBrowse: false, tray: true, startup: false, lockOnEnd: 'never', idleMins: '0', maxMins: '0', presignin: false, lan: true, allowOnly: false, allowIds: '', hideWall: true, recIncoming: false, recKeep: '30' };
 const ACCENTS = {
   violet: ['#5b8cff', '#a26bff'], ocean: ['#2f9bff', '#22d3c5'], sunset: ['#ff6a5b', '#ffb347'],
   emerald: ['#1fcf8f', '#3aa0ff'], rose: ['#ff4f8b', '#b36bff'], mono: ['#7b86a8', '#aab3d6']
 };
 let S = { ...DEFAULTS };
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ud-settings') || '{}') }; } catch {}
-const saveSettings = () => { try { localStorage.setItem('ud-settings', JSON.stringify(S)); } catch {} };
+const saveSettings = () => { try { localStorage.setItem('ud-settings', JSON.stringify(S)); } catch {} setTimeout(() => syncPresignin(), 0); };
 let systemDark = true;
 
 function applyTheme(animate) {
@@ -183,13 +186,25 @@ function storedId() {
 
 async function boot() {
   await loadPeer();
-  myId = storedId();
+  if (PRE) {
+    PRE_CFG = await window.dw.preConfig();
+    if (!PRE_CFG) { window.dw.preLog('no settings: quitting'); window.dw.preQuit(); return; }
+    S = { ...DEFAULTS, unattended: true, otp: false, allowOnly: !!PRE_CFG.allowOnly, allowIds: PRE_CFG.allowIds || '', idleMins: PRE_CFG.idleMins || '0', maxMins: PRE_CFG.maxMins || '0',
+      hideWall: false, recIncoming: false, audio: false, lan: false, net: PRE_CFG.net || undefined };
+    try { localStorage.setItem('dw-id', PRE_CFG.id); } catch {}
+  }
+  myId = PRE ? PRE_CFG.id : storedId();
   selfPeerId = PREFIX + myId + (TAB ? '-' + Math.random().toString(36).slice(2, 6) : '');
   peer = new Peer(selfPeerId, await peerOptions());
-  peer.on('open', () => { renderId(myId); setStatus('Online · ready', true); });
+  peer.on('open', () => { renderId(myId); setStatus('Online · ready', true); try { sessionStorage.removeItem('ud-hold'); } catch {} });
   peer.on('disconnected', () => { setStatus('Reconnecting…'); setTimeout(() => !peer.destroyed && peer.reconnect(), 1500); });
   peer.on('error', (e) => {
-    if (e.type === 'unavailable-id') { if (!TAB) { try { localStorage.removeItem('dw-id'); } catch {} } location.reload(); return; }
+    if (e.type === 'unavailable-id') {
+      // another copy may still hold this address for a moment (the before-sign-in copy, or one that just closed): keep it and retry
+      if (PRE || (!TAB && tryHoldId())) { window.dw.preLog?.('address busy, retrying'); setTimeout(() => location.reload(), 5000); return; }
+      if (!TAB) { try { localStorage.removeItem('dw-id'); } catch {} }
+      location.reload(); return;
+    }
     if (e.type === 'peer-unavailable') { failConnect('Desk not found', 'That ID is offline or does not exist.'); return; }
     console.error(e); setStatus('Network: ' + e.type);
   });
@@ -219,6 +234,7 @@ async function onIncomingConn(c) {
       else { c.send({ t: 'denied' }); setTimeout(() => c.close(), 300); logHistory({ dir: 'in', id: who, how: 'declined' }); }
     };
     const ask = async () => {
+      if (PRE) { if (!settled) { settled = true; c.send({ t: 'nologin' }); setTimeout(() => c.close(), 300); pendingHost = null; } return; }
       if (asked || settled) return; asked = true;
       chime();
       c.send({ t: 'wait' });
@@ -260,12 +276,15 @@ async function acceptHost(c, who, how, perms) {
     logHistory({ dir: 'in', id: who, how }); repStart(who, how);
     if (S.hideWall && !IS_MAC) { await window.dw.wallpaperHide().catch(() => {}); await new Promise(r => setTimeout(r, 250)); }   // Windows, and GNOME/Cinnamon/MATE on Linux
     try {
+      if (PRE) { screens = [{ id: 'presignin', name: 'Sign-in screen', primary: true }]; curScreen = 0; stream = preStream(); window.dw.preLog(`session with ${who} (${how})`); }
+      else {
       screens = await window.dw.screens(false);
       curScreen = Math.max(0, screens.findIndex(s => s.primary));
       stream = await capture(screens[curScreen], S.audio);
+      }
       call = (c.provider || peer).call(c.peer, stream, { sdpTransform: preferCodecSdp }); // same server the visitor came in on (internet or LAN)
       tune(call.peerConnection, 'balanced');
-      wireData(c); startClipSync(); sendScreens(); sendPerms(); startIdleWatch();
+      wireData(c); if (!PRE) { startClipSync(); sendScreens(); } sendPerms(); startIdleWatch();
       if (S.recIncoming) hostRecStart(who);
       startSessionTimer();
       if (!IS_MAC) window.dw.secureStart().catch(() => {}); // stream lock screen / UAC if the service is installed
@@ -472,6 +491,8 @@ function wireData(c) {
       case 'reboot': if (role === 'host') onRebootRequest(); break;
       case 'reboot-r': if (role === 'viewer') onRebootReply(m); break;
       case 'busy': failConnect('Busy', 'That desk is already in a session.'); break;
+      case 'nologin': if (role === 'viewer' && !call) failConnect('Nobody is signed in', 'That PC is at its sign-in screen. Connect with its unattended access password.'); break;
+      case 'handoff': if (role === 'viewer') { toast('Signed in. Waiting for UniDesk to start on that PC…', 4000); startRestartWait(viewerTarget, { label: 'Signing in to', sub: 'Waiting for UniDesk to start for the user', first: 6000 }); } break;
       case 'wait': if (role === 'viewer' && !call) { $('authBox').classList.remove('show'); overlay('wait', `Calling <span>${fmt(viewerTarget)}</span>`, 'Waiting for your partner to accept…'); } break;
       case 'auth': if (role === 'viewer') onAuth(m); break;
       case 'auth-fail':
@@ -1012,7 +1033,7 @@ $('pwSave').onclick = async () => {
   if (a !== b) return ($('pwErr').textContent = "The passwords don't match.");
   const r = await window.dw.authSet(a);
   if (!r.ok) return ($('pwErr').textContent = r.error);
-  closePwDialog(); S.unattended = true; saveSettings(); applyAll(); refreshAuthUi();
+  closePwDialog(); S.unattended = true; saveSettings(); applyAll(); refreshAuthUi(); syncPresignin(true);   // new password: update the before-sign-in copy
   toast('Unattended access is on', 2200);
 };
 $('pwRemove').onclick = async () => {
@@ -1028,7 +1049,7 @@ $('forgetSaved').onclick = async () => { await window.dw.pwForget(null); toast('
 refreshAuthUi();
 
 // main-process prefs (tray, startup) + tray integration
-const pushMainPrefs = () => { if (!TAB) window.dw.mainPrefs({ tray: !!S.tray, startup: !!S.startup }); };
+const pushMainPrefs = () => { if (!TAB && !PRE) window.dw.mainPrefs({ tray: !!S.tray, startup: !!S.startup }); };
 pushMainPrefs();
 document.querySelectorAll('[data-set="tray"],[data-set="startup"]').forEach(i => i.addEventListener('change', pushMainPrefs));
 window.dw.onOpenSettings(() => openSettings('security'));
@@ -1077,6 +1098,7 @@ async function peerOptions() {
     const cred = await window.dw.pwGet('__turn__');
     iceServers.push({ urls: n.turnUrls.split(/[\s,]+/).filter(Boolean), username: n.turnUser || undefined, credential: cred || undefined });
   }
+  if (PRE && PRE_CFG?.turnCred && iceServers.length > ICE.iceServers.length) iceServers[iceServers.length - 1].credential = PRE_CFG.turnCred;
   const o = { config: { ...ICE, iceServers }, debug: 0 };
   if (n.host.trim()) Object.assign(o, { host: n.host.trim(), port: +n.port || (n.secure ? 443 : 80), path: n.path || '/', secure: !!n.secure });
   return o;
@@ -1192,7 +1214,7 @@ window.dw.onUpdateProgress((m) => {
     $('updAction').style.display = ''; $('updAction').textContent = 'Try again'; $('updAction').onclick = runForcedUpdate;
   }
 });
-if (!TAB) setInterval(() => { if (!updating) checkUpdate(); }, 30 * 60e3);
+if (!TAB && !PRE) setInterval(() => { if (!updating) checkUpdate(); }, 30 * 60e3);
 
 // ================= LAN MODE =================
 let viaLan = false, lanHostPeer = null; const nearbyMap = new Map(), lanClients = new Map();
@@ -1258,6 +1280,7 @@ $('svcBtn').onclick = async () => {
 const SF_CHUNK = 48 * 1024; let sfSeq = 0;
 window.dw.onSecureFrame((f) => {
   if (role !== 'host') return;
+  if (PRE) { if (f) preDraw(f.jpeg); return; }
   if (!f) return send({ t: 'sf-end' });
   const id = ++sfSeq, n = Math.ceil(f.jpeg.length / SF_CHUNK);
   for (let i = 0; i < n; i++) send({ t: 'sf', id, i, n, k: f.desk, d: f.jpeg.slice(i * SF_CHUNK, (i + 1) * SF_CHUNK) });
@@ -1325,8 +1348,10 @@ $('video').addEventListener('loadedmetadata', () => drawMode && placeDrawLayer()
 $('hostFile').onclick = () => $('filePick').click();
 
 boot().then(async () => {
+  if (PRE) { preBoot(); return; }
   if (TAB) { tabBoot(); return; }
   window.dw.myId(fmt(myId));
+  syncPresignin(true);
   if (await peerReady()) startLanHost(); else setTimeout(startLanHost, 3000);
   connectFromLink(await window.dw.takePendingLink());
   checkUpdate();
@@ -1467,7 +1492,7 @@ $('ctrlDeny').onclick = () => answerControl(false);
 // ================= ONE-TIME ACCESS CODE =================
 let otpCode = null;
 async function rotateCode() {
-  if (TAB) return;   // the one-time code belongs to the main window
+  if (TAB || PRE) return;   // the one-time code belongs to the main window
   if (!S.otp) { otpCode = null; await window.dw.otpClear(); $('otpRow').style.display = 'none'; return; }
   otpCode = await window.dw.otpNew();
   $('otpRow').style.display = ''; $('otpCode').textContent = otpCode;
@@ -1661,8 +1686,8 @@ function onRebootReply(m) {
   else if (!m.unattended) toast('Unattended access is off there, so someone will need to accept when it’s back', 5000);
   startRestartWait(viewerTarget);
 }
-function startRestartWait(id) {
-  restartWait = { id, since: Date.now(), until: Date.now() + 5 * 60e3, next: Date.now() + 25e3 };
+function startRestartWait(id, o = {}) {
+  restartWait = { id, since: Date.now(), until: Date.now() + 5 * 60e3, next: Date.now() + (o.first || 25e3), label: o.label, sub: o.sub };
   byeReceived = true; endAll({ quiet: true });
   clearInterval(restartTimer); restartTimer = setInterval(restartTick, 1000); restartTick();
 }
@@ -1672,7 +1697,7 @@ function restartTick() {
   if (now > w.until) { stopRestartWait(); overlay('fail', 'Still offline', 'The PC didn’t come back within 5 minutes.'); setTimeout(() => overlay(null), 2600); return; }
   if (role) return; // an attempt is in progress; its own overlay is showing
   const s = Math.round((now - w.since) / 1000);
-  overlay('wait', `Restarting <span>${fmt(w.id)}</span>`, `Waiting for the PC to come back · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+  overlay('wait', `${w.label || 'Restarting'} <span>${fmt(w.id)}</span>`, `${w.sub || 'Waiting for the PC to come back'} · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
   if (now >= w.next) { w.next = now + 8000; connect(w.id, true); }
 }
 function stopRestartWait() { restartWait = null; clearInterval(restartTimer); }
@@ -1857,7 +1882,77 @@ async function hostRecStop() {
   await r.done;
 }
 $('recInOpen').onclick = () => window.dw.recInOpen();
-if (!TAB) setTimeout(() => { if (S.recKeep && S.recKeep !== '0') window.dw.recInPrune(S.recKeep); }, 8000);
+if (!TAB && !PRE) setTimeout(() => { if (S.recKeep && S.recKeep !== '0') window.dw.recInPrune(S.recKeep); }, 8000);
+
+// ================= BEFORE SIGN-IN (Windows) =================
+// Settings side: tell the service what the before-sign-in copy needs (address, password check, network, allow-list).
+let preSyncKey = '';
+async function syncPresignin(force) {
+  if (TAB || PRE || window.dw.platform !== 'win32' || !myId) return;
+  const on = !!(S.presignin && S.unattended);
+  const n = net();
+  const cfg = on ? { id: myId, net: S.net || null, turnCred: n.turnUrls.trim() ? await window.dw.pwGet('__turn__') : null, allowOnly: !!S.allowOnly, allowIds: S.allowIds || '', idleMins: S.idleMins, maxMins: S.maxMins } : null;
+  const key = JSON.stringify([on, cfg]);
+  if (key === preSyncKey && !force) return;
+  preSyncKey = key;
+  const r = await window.dw.presigninSet(on, cfg);
+  if (!r?.ok && on) { preSyncKey = ''; S.presignin = false; try { localStorage.setItem('ud-settings', JSON.stringify(S)); } catch {} applyAll(); toast('Couldn’t make this PC reachable before sign-in: ' + (r?.error || 'unknown error'), 4200); }
+}
+if (!TAB && !PRE) document.querySelector('[data-set="presignin"]').addEventListener('change', (e) => {
+  if (!e.target.checked) return toast('Before sign-in access is off', 1800);
+  if (!S.unattended) { S.presignin = false; saveSettings(); applyAll(); return toast('Turn on unattended access with a password first: nobody is there to accept before sign-in', 4200); }
+  // the signed-in UniDesk has to start when the user signs in, so the visitor can continue after the hand-over
+  if (!S.startup) { S.startup = true; saveSettings(); applyAll(); pushMainPrefs(); }
+  toast('This PC can now be reached before sign-in, with your unattended password', 3200);
+});
+
+// The hidden copy: shows the sign-in screen in a normal video and hands over once someone signs in.
+let preCanvas = null, preCtx = null, preImg = null, preLastFrame = 0, preWaitTimer = null;
+function preStream() {
+  preCanvas = document.createElement('canvas'); preCanvas.width = 1280; preCanvas.height = 720;
+  preCtx = preCanvas.getContext('2d');
+  // a canvas only sends video when it is drawn on, so keep repainting the waiting picture until real frames arrive
+  const waiting = () => {
+    if (preLastFrame && Date.now() - preLastFrame < 2000) return;
+    preCtx.fillStyle = '#0b1020'; preCtx.fillRect(0, 0, preCanvas.width, preCanvas.height);
+    preCtx.fillStyle = '#c9d1ea'; preCtx.font = '28px Segoe UI, sans-serif'; preCtx.textAlign = 'center';
+    preCtx.fillText('Waiting for the sign-in screen…', preCanvas.width / 2, preCanvas.height / 2);
+  };
+  waiting(); clearInterval(preWaitTimer); preWaitTimer = setInterval(waiting, 500);
+  const s = preCanvas.captureStream(12);
+  s.getVideoTracks()[0].contentHint = 'detail';
+  return s;
+}
+function preDraw(b64) {
+  if (!preCtx) return;
+  const img = preImg || (preImg = new Image());
+  img.onload = () => {
+    if (preCanvas.width !== img.naturalWidth || preCanvas.height !== img.naturalHeight) { preCanvas.width = img.naturalWidth; preCanvas.height = img.naturalHeight; }
+    preCtx.drawImage(img, 0, 0); preLastFrame = Date.now();
+  };
+  img.src = 'data:image/jpeg;base64,' + b64;
+}
+let preHandingOver = false;
+function preBoot() {
+  window.dw.preLog(`online as ${fmt(myId)}`);
+  peer.on('open', () => window.dw.preLog('registered with the signaling server'));
+  peer.on('error', (e) => window.dw.preLog('network: ' + e.type));
+  setInterval(async () => {
+    if (preHandingOver) return;
+    const st = await window.dw.preState();
+    if (st !== 'user') return;
+    // someone signed in: tell the visitor to wait for the signed-in app, then free this address for it
+    preHandingOver = true;
+    if (role === 'host' && conn?.open) { send({ t: 'handoff' }); byeReceived = true; }
+    // sign off from the signaling server properly, so the address is free at once for the signed-in app
+    setTimeout(() => { try { peer.destroy(); } catch {} setTimeout(() => window.dw.preQuit(), 500); }, 1500);
+  }, 2000);
+}
+// Signed-in app: while the before-sign-in copy may still hold this address, keep the address and retry (up to 2 minutes)
+function tryHoldId() {
+  let n = 0; try { n = +sessionStorage.getItem('ud-hold') || 0; sessionStorage.setItem('ud-hold', String(n + 1)); } catch {}
+  return n < 24;
+}
 
 // ================= SESSION TABS =================
 // Main window: draws the tab strip. A tab: tells the main window its title and connects to ?target.

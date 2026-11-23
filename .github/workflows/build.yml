@@ -23,8 +23,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Installer: UniDesk icon + "run as administrator". The portable zip keeps Electron's official
+          # executable byte-for-byte (no icon/manifest edits, no asar integrity stamp) so Windows Smart App
+          # Control recognises it and lets it run without a code-signing certificate.
           - os: windows-latest
-            cmd: npx electron-builder --win zip nsis --x64 --publish never --config.directories.output=release
+            cmd: npx electron-builder --win nsis --x64 --publish never --config.directories.output=release && npx electron-builder --win zip --x64 --publish never --config.directories.output=release --config.win.signAndEditExecutable=false --config.asar=false
           - os: macos-latest        # Apple Silicon (arm64)
             cmd: npx electron-builder --mac dmg zip --arm64 --publish never --config.directories.output=release
           - os: macos-latest        # Intel (x64), cross-built

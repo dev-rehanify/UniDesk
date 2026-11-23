@@ -113,7 +113,11 @@
       "executableName": "unidesk",
       "synopsis": "Free, open-source peer-to-peer remote desktop",
       "artifactName": "UniDesk-${version}-linux-x64.${ext}"
-    }
+    },
+    "electronLanguages": [
+      "en-US"
+    ],
+    "compression": "maximum"
   },
   "allowScripts": {
     "electron@33.4.11": true

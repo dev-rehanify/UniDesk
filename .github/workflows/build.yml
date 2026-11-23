@@ -1,6 +1,6 @@
 name: Build UniDesk
 
-# Builds Windows and macOS (Apple Silicon + Intel) apps on every push to main
+# Builds Windows, macOS (Apple Silicon + Intel) and Linux apps on every push to main
 # and publishes them to ONE release named after the version in package.json
 # (currently v1.1.0). The release, its tag and its files are replaced in place,
 # so there is only ever one version until package.json's "version" is changed.
@@ -29,6 +29,8 @@ jobs:
             cmd: npx electron-builder --mac dmg zip --arm64 --publish never --config.directories.output=release
           - os: macos-latest        # Intel (x64), cross-built
             cmd: npx electron-builder --mac dmg zip --x64 --publish never --config.directories.output=release
+          - os: ubuntu-latest       # Linux x64 AppImage
+            cmd: npx electron-builder --linux AppImage --x64 --publish never --config.directories.output=release
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -59,10 +61,33 @@ jobs:
             release/*.exe
             release/*.zip
             release/*.dmg
+            release/*.AppImage
           if-no-files-found: error
 
-  release:
+  # Runs two copies of the Linux build on a virtual screen and checks a real session works.
+  linux-test:
     needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          name: unidesk-3
+      - name: Install a virtual screen and test tools
+        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool libxtst6 libnss3 libasound2t64 libgbm1
+      - name: Test a real session between two copies
+        run: |
+          chmod +x dist/*.AppImage
+          Xvfb :99 -screen 0 1280x800x24 &
+          sleep 2
+          DISPLAY=:99 node scripts/linux-e2e.mjs dist/UniDesk-*-linux-x64.AppImage
+
+  release:
+    needs: [build, linux-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,16 +104,16 @@ jobs:
           git tag -f "$V" && git push -f origin "refs/tags/$V"
           if ! gh release view "$V" >/dev/null 2>&1; then
             gh release create "$V" --title "UniDesk ${V#v}" --latest \
-              --notes "Free, open-source peer-to-peer remote desktop for Windows and macOS. Download the file for your system below."
+              --notes "Free, open-source peer-to-peer remote desktop for Windows, macOS and Linux. Download the file for your system below."
           fi
           # latest.json tells installed apps which build is newest and each file's SHA-256
           BUILD=${{ github.run_number }} SHA=${{ github.sha }} node -e "
             const fs=require('fs'),c=require('crypto'),v=require('./package.json').version;
             const f=n=>({name:n,sha256:c.createHash('sha256').update(fs.readFileSync('dist/'+n)).digest('hex')});
-            const files={'win-installer':f('UniDesk-'+v+'-win-x64.exe'),'win-zip':f('UniDesk-'+v+'-win-x64.zip'),'mac-arm64':f('UniDesk-'+v+'-mac-arm64.zip'),'mac-x64':f('UniDesk-'+v+'-mac-x64.zip')};
+            const files={'win-installer':f('UniDesk-'+v+'-win-x64.exe'),'win-zip':f('UniDesk-'+v+'-win-x64.zip'),'mac-arm64':f('UniDesk-'+v+'-mac-arm64.zip'),'mac-x64':f('UniDesk-'+v+'-mac-x64.zip'),'linux-x64':f('UniDesk-'+v+'-linux-x64.AppImage')};
             fs.writeFileSync('dist/latest.json',JSON.stringify({version:v,build:+process.env.BUILD,sha:process.env.SHA,files},null,2));
           "
           # remove old files, then upload the fresh builds
           for a in $(gh release view "$V" --json assets --jq '.assets[].name'); do gh release delete-asset "$V" "$a" --yes; done
           gh release upload "$V" dist/* --clobber
-          gh release edit "$V" --latest
+          gh release edit "$V" --latest --notes "Free, open-source peer-to-peer remote desktop for Windows, macOS and Linux. Download the file for your system below."

@@ -101,6 +101,16 @@
     },
     "dmg": {
       "title": "UniDesk"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Network",
+      "icon": "build/icon.png",
+      "executableName": "unidesk",
+      "synopsis": "Free, open-source peer-to-peer remote desktop",
+      "artifactName": "UniDesk-${version}-linux-x64.${ext}"
     }
   },
   "allowScripts": {

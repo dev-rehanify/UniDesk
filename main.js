@@ -51,6 +51,7 @@ function get(url, onData, redirects = 0) {
 function updateKey() {
   if (process.platform === 'win32') return isPortable() ? 'win-zip' : 'win-installer';
   if (IS_MAC) return process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64';
+  if (process.platform === 'linux' && process.env.APPIMAGE) return 'linux-x64';   // the AppImage can replace itself
   return null;
 }
 function isPortable() { return process.platform === 'win32' && !fs.existsSync(path.join(path.dirname(process.execPath), 'Uninstall UniDesk.exe')); }
@@ -60,7 +61,7 @@ ipcMain.handle('update-check', async () => {
   try {
     const remote = JSON.parse((await get(RELEASE_BASE + 'latest.json')).toString());
     const cur = localBuild(); const key = updateKey(); const file = remote.files?.[key];
-    return { current: cur, remote: { build: remote.build, version: remote.version, notes: remote.notes }, available: !!file && +remote.build > +cur.build, key, canAuto: key === 'win-installer' || key?.startsWith('mac-') };
+    return { current: cur, remote: { build: remote.build, version: remote.version, notes: remote.notes }, available: !!file && +remote.build > +cur.build, key, canAuto: key === 'win-installer' || key?.startsWith('mac-') || key === 'linux-x64' };
   } catch (e) { return { error: e.message }; }
 });
 ipcMain.handle('update-install', async (e) => {
@@ -85,6 +86,11 @@ ipcMain.handle('update-install', async (e) => {
     } else if (IS_MAC) {
       const bundle = path.resolve(process.execPath, '../../..'); // .../UniDesk.app
       const sh = `sleep 2; X="$(mktemp -d)"; /usr/bin/ditto -xk "${dest}" "$X" && rm -rf "${bundle}" && mv "$X/UniDesk.app" "${bundle}" && open "${bundle}"`;
+      spawn('/bin/sh', ['-c', sh], { detached: true, stdio: 'ignore' }).unref();
+    } else if (key === 'linux-x64') {
+      // replace the AppImage file in place, then start the new one
+      const img = process.env.APPIMAGE; fs.chmodSync(dest, 0o755);
+      const sh = `sleep 2; mv -f '${dest.replace(/'/g, "'\\''")}' '${img.replace(/'/g, "'\\''")}' && chmod +x '${img.replace(/'/g, "'\\''")}' && '${img.replace(/'/g, "'\\''")}' >/dev/null 2>&1 &`;
       spawn('/bin/sh', ['-c', sh], { detached: true, stdio: 'ignore' }).unref();
     } else throw new Error('This copy cannot update itself');
     quitting = true; setTimeout(() => app.exit(0), 400);
@@ -193,7 +199,7 @@ function termStart(sender) {
   if (term) return;
   const shell = process.platform === 'win32'
     ? spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '-'], { cwd: os0.homedir(), windowsHide: true })
-    : spawn(process.env.SHELL || '/bin/zsh', ['-s'], { cwd: os0.homedir() });
+    : spawn(process.env.SHELL || (IS_MAC ? '/bin/zsh' : '/bin/bash'), ['-s'], { cwd: os0.homedir() });
   term = { p: shell, sender };
   const out = (d) => { try { sender.send('term-out', d.toString()); } catch {} };
   shell.stdout.on('data', out); shell.stderr.on('data', out);
@@ -533,6 +539,13 @@ ipcMain.on('main-prefs', (_e, p) => {
     // so start-up uses a scheduled task with highest privileges instead.
     if (mainPrefs.startup) run('schtasks', ['/create', '/f', '/tn', 'UniDesk', '/sc', 'onlogon', '/rl', 'highest', '/tr', `"${process.execPath}" --hidden`]);
     else run('schtasks', ['/delete', '/f', '/tn', 'UniDesk']);
+  } else if (process.platform === 'linux') {
+    // Linux has no login-item API: use an XDG autostart entry pointing at the AppImage
+    const file = path.join(os0.homedir(), '.config', 'autostart', 'unidesk.desktop');
+    try {
+      if (mainPrefs.startup && process.env.APPIMAGE) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `[Desktop Entry]\nType=Application\nName=UniDesk\nExec="${process.env.APPIMAGE}" --hidden\nX-GNOME-Autostart-enabled=true\n`); }
+      else fs.rmSync(file, { force: true });
+    } catch {}
   } else app.setLoginItemSettings({ openAtLogin: !!mainPrefs.startup, openAsHidden: true });
 });
 ipcMain.on('show-window', showWin);
@@ -749,12 +762,27 @@ ipcMain.handle('open-url', async (_e, u) => {
 ipcMain.on('lock-pc', () => {
   if (process.platform === 'win32') execFile('rundll32.exe', ['user32.dll,LockWorkStation']);
   else if (IS_MAC) execFile('/usr/bin/pmset', ['displaysleepnow']); // locks when 'require password' is on
+  else execFile('loginctl', ['lock-session'], () => {});
 });
 ipcMain.handle('reboot', () => new Promise((res) => {
   if (process.platform === 'win32') execFile('shutdown.exe', ['/r', '/t', '5', '/c', 'UniDesk: your remote partner restarted this PC'], { windowsHide: true }, (err) => res(!err));
   else if (IS_MAC) execFile('/usr/bin/osascript', ['-e', 'tell application "System Events" to restart'], (err) => res(!err));
-  else res(false);
+  else linuxPower('reboot').then(res);
 }));
+// Linux: ask logind whether this user may do it, then do it after 3 s so the reply reaches the visitor first
+function linuxPower(what) {
+  return new Promise((res) => {
+    if (what === 'signout') {
+      const sid = process.env.XDG_SESSION_ID;
+      try { spawn('/bin/sh', ['-c', sid ? `sleep 3; loginctl terminate-session '${sid.replace(/[^\w-]/g, '')}'` : 'sleep 3; loginctl terminate-user "$(id -un)"'], { detached: true, stdio: 'ignore' }).unref(); return res(true); } catch { return res(false); }
+    }
+    const m = { reboot: ['CanReboot', 'reboot'], sleep: ['CanSuspend', 'suspend'], shutdown: ['CanPowerOff', 'poweroff'] }[what]; if (!m) return res(false);
+    execFile('busctl', ['call', 'org.freedesktop.login1', '/org/freedesktop/login1', 'org.freedesktop.login1.Manager', m[0]], { timeout: 4000 }, (err, out) => {
+      if (err || !/"yes"/.test(String(out))) return res(false);
+      try { spawn('/bin/sh', ['-c', `sleep 3; systemctl ${m[1]}`], { detached: true, stdio: 'ignore' }).unref(); res(true); } catch { res(false); }
+    });
+  });
+}
 // Sleep / sign out / shut down. Each waits a few seconds so the reply reaches the visitor first.
 // UNIDESK_POWER_DRYRUN=1 (tests only) answers without doing anything.
 ipcMain.handle('power', (_e, what) => new Promise((res) => {
@@ -770,7 +798,7 @@ ipcMain.handle('power', (_e, what) => new Promise((res) => {
   } else if (IS_MAC) {
     const verb = { sleep: 'sleep', signout: 'log out', shutdown: 'shut down' }[what];
     try { spawn('/usr/bin/osascript', ['-e', 'delay 3', '-e', `tell application "System Events" to ${verb}`], { detached: true, stdio: 'ignore' }).unref(); res(true); } catch { res(false); }
-  } else res(false);
+  } else linuxPower(what).then(res);
 }));
 
 // ---------- Remote task manager ----------

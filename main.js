@@ -686,6 +686,54 @@ ipcMain.handle('sysinfo', () => {
     cores: os.cpus().length
   };
 });
+// Detailed, live PC info for the visitor's info panel
+const cpuTimes = () => os.cpus().reduce((a, c) => { const t = c.times; a.idle += t.idle; a.total += t.user + t.nice + t.sys + t.idle + t.irq; return a; }, { idle: 0, total: 0 });
+let cpuPrev = cpuTimes();
+const runPs = (cmd) => new Promise((res) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd], { windowsHide: true, timeout: 6000 }, (err, out) => res(err ? '' : String(out))));
+let slowInfo = null, slowAt = 0;   // disks, battery and OS edition change slowly: refresh at most every 30 s
+async function getSlowInfo() {
+  if (slowInfo && Date.now() - slowAt < 30000) return slowInfo;
+  const disks = [];
+  const roots = process.platform === 'win32' ? [...'CDEFGHIJKLMNOPQRSTUVWXYZ'].map(L => L + ':\\') : ['/', ...(() => { try { return fs.readdirSync('/Volumes').map(v => '/Volumes/' + v); } catch { return []; } })()];
+  for (const r of roots) {
+    try { const s = await fs.promises.statfs(r); const total = s.blocks * s.bsize; if (total > 0) disks.push({ name: process.platform === 'win32' ? r.slice(0, 2) : (r === '/' ? 'Macintosh HD' : path.basename(r)), total, free: s.bavail * s.bsize }); } catch {}
+  }
+  let battery = null, edition = '';
+  if (process.platform === 'win32') {
+    const out = await runPs("$b = Get-CimInstance Win32_Battery | Select-Object -First 1; $o = Get-CimInstance Win32_OperatingSystem; \"$($o.Caption)|$($o.Version)|$($b.EstimatedChargeRemaining)|$($b.BatteryStatus)\"");
+    const [cap, ver, pct, st] = out.trim().split('|');
+    edition = cap ? `${cap.replace(/^Microsoft\s+/, '')} (${ver})` : '';
+    if (pct) battery = { pct: +pct, charging: ['2', '6', '7', '8', '9'].includes(st) };
+  } else if (IS_MAC) {
+    const out = await new Promise(r => execFile('/usr/bin/pmset', ['-g', 'batt'], { timeout: 4000 }, (e, o) => r(e ? '' : String(o))));
+    const m = out.match(/(\d+)%;\s*([a-z ]+);/i); if (m) battery = { pct: +m[1], charging: /^charg|charged/i.test(m[2].trim()) };
+  }
+  slowInfo = { disks, battery, edition }; slowAt = Date.now(); return slowInfo;
+}
+ipcMain.handle('sysinfo-full', async () => {
+  const now = cpuTimes(); const dt = now.total - cpuPrev.total;
+  const cpuPct = dt > 0 ? Math.max(0, Math.min(100, Math.round((1 - (now.idle - cpuPrev.idle) / dt) * 100))) : 0; cpuPrev = now;
+  const nets = [];
+  for (const [name, list] of Object.entries(os.networkInterfaces())) for (const a of list || []) if (!a.internal && a.family === 'IPv4') nets.push({ name, ip: a.address, mac: a.mac });
+  const slow = await getSlowInfo();
+  return {
+    host: os.hostname(), user: os.userInfo().username,
+    os: slow.edition || (process.platform === 'win32' ? `Windows (${os.release()})` : IS_MAC ? `macOS ${process.getSystemVersion()}` : `Linux ${os.release()}`),
+    arch: os.arch(), uptime: os.uptime(),
+    cpu: (os.cpus()[0]?.model || '').replace(/\s+/g, ' ').trim(), cores: os.cpus().length, cpuPct,
+    mem: { total: os.totalmem(), free: os.freemem() },
+    disks: slow.disks, battery: slow.battery, nets: nets.slice(0, 8),
+    displays: eScreen.getAllDisplays().map(d => ({ w: Math.round(d.size.width * d.scaleFactor), h: Math.round(d.size.height * d.scaleFactor), scale: d.scaleFactor, primary: d.id === eScreen.getPrimaryDisplay().id })),
+    app: app.getVersion(), admin: process.platform === 'win32' ? await isAdmin() : null
+  };
+});
+// Open a web link the visitor sent (http/https only)
+ipcMain.handle('open-url', async (_e, u) => {
+  let url; try { url = new URL(String(u)); } catch { return { error: 'That isn’t a valid web address' }; }
+  if (!['http:', 'https:'].includes(url.protocol) || String(u).length > 2048) return { error: 'Only http and https links can be opened' };
+  if (process.env.UNIDESK_POWER_DRYRUN === '1') return { ok: true, host: url.host, dry: true };   // tests only
+  try { await shell.openExternal(url.href); return { ok: true, host: url.host }; } catch { return { error: 'The remote PC couldn’t open it' }; }
+});
 ipcMain.on('lock-pc', () => {
   if (process.platform === 'win32') execFile('rundll32.exe', ['user32.dll,LockWorkStation']);
   else if (IS_MAC) execFile('/usr/bin/pmset', ['displaysleepnow']); // locks when 'require password' is on

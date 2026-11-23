@@ -73,6 +73,8 @@ contextBridge.exposeInMainWorld('dw', {
   privacy: (on, who) => ipcRenderer.invoke('privacy', on, who),
   blockInput: (on) => ipcRenderer.invoke('block-input', on),
   power: (what) => ipcRenderer.invoke('power', what),
+  sysinfoFull: () => ipcRenderer.invoke('sysinfo-full'),
+  openUrl: (u) => ipcRenderer.invoke('open-url', u),
   recInStart: (name) => ipcRenderer.invoke('rec-in-start', name),
   recInOpen: () => ipcRenderer.send('rec-in-open'),
   recInPrune: (days) => ipcRenderer.invoke('rec-in-prune', days),

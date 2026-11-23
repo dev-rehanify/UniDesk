@@ -35,6 +35,8 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 | ⏸️ **Pause sharing** | The host can freeze the screen (e.g. while typing a password); remote input is blocked while paused. |
 | 🚫 **Block their input** | Lock the remote mouse and keyboard while you work (Windows). Lifted automatically when the session ends, control is taken back or the connection goes quiet; Ctrl+Alt+Del there always lifts it. |
 | 🖼️ **Plain wallpaper** | The host's wallpaper is hidden during sessions for a faster, sharper picture, and comes back when the visitor leaves (Windows). |
+| ℹ️ **Remote PC info** | Live CPU, memory, disks, battery, network, screens and uptime of the other PC, refreshed every 5 seconds. |
+| 🔗 **Open a link there** | Type a web address and it opens in the other PC's browser (http/https only). |
 | 📊 **Remote task manager** | See the other PC's processes with live CPU and memory, search them and end a frozen app. |
 | ⏺️ **Record incoming sessions** | Optional security log: every session on your PC is saved to Videos\UniDesk\Incoming, old recordings are cleaned up after 7/30/90 days, and visitors always see a REC badge. |
 | ⏻ **Sleep, sign out, shut down** | Power options for the remote PC in the Keys menu (needs control). |

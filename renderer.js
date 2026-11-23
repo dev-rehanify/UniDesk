@@ -496,6 +496,7 @@ function wireData(c) {
         $('tmBtn').style.display = m.control ? '' : 'none'; if (!m.control) toggleTm(false);
         $('privBtn').style.display = m.control ? '' : 'none'; if (!m.control) setPrivBtn(false);
         $('blockBtn').style.display = m.control ? '' : 'none'; if (!m.control) setBlockBtn(false);
+        $('piBtn').style.display = m.control ? '' : 'none'; if (!m.control) togglePi(false);
         fbButtons();
         if (!m.terminal) toggleTerm(false);
         if (m.terminal && !was.terminal) toast('Partner allowed the remote terminal', 2200);
@@ -504,6 +505,8 @@ function wireData(c) {
       case 'monitor': if (role === 'host') switchMonitor(m.i); break;
       case 'quality': if (role === 'host') tune(call.peerConnection, m.q); break;
       case 'hb': break;
+      case 'pi': if (role === 'host') onPiRequest(m); break;
+      case 'pi-r': if (role === 'viewer') onFsReply(m); break;
       case 'rec-on': if (role === 'viewer') { $('recBadge').classList.add('show'); if (!m.again) toast('Your partner is recording this session', 3200); } break;
       case 'power': if (role === 'host') onPowerRequest(m); break;
       case 'power-r': if (role === 'viewer') onPowerReply(m); break;
@@ -645,6 +648,7 @@ function endAll(opts = {}) {
   $('recBadge').classList.remove('show');
   if (wasHost || hostBlock) { hostBlock = false; clearInterval(blockWatch); window.dw.blockInput(false); }
   setBlockBtn(false); $('blockBtn').style.display = 'none'; clearInterval(hbTimer);
+  togglePi(false); $('piBtn').style.display = 'none'; $('piBody').innerHTML = '';
   if (wasHost || hostPrivacy) { hostPrivacy = false; window.dw.privacy(false); }
   setPrivBtn(false); $('privBtn').style.display = 'none'; fbAskClose();
   hostPaused = false; $('pauseBtn').classList.remove('on'); $('pauseLabel').textContent = 'Pause'; setPausedView(false); toggleBrowse(false); $('browseBtn').style.display = 'none'; toggleTm(false);
@@ -753,6 +757,9 @@ $('combo').onchange = async (e) => {
     if (!text) toast('Your clipboard is empty', 1600);
     else if (!control || remotePerms.control === false) toast('Remote control is off', 1600);
     else { sendInput({ t: 'type', text: text.slice(0, 5000) }); toast(`Typing ${Math.min(text.length, 5000)} characters…`, 1600); }
+  } else if (v === 'openurl') {
+    if (!control || remotePerms.control === false) toast('Remote control is off', 1600);
+    else { togglePi(true); setTimeout(() => $('piUrlIn').focus(), 350); }
   } else if (v === 'sleep' || v === 'signout' || v === 'shutdown') {
     const what = { sleep: 'Put {pc} to sleep?', signout: 'Sign out the user on {pc}?\n\nUnsaved work in their open apps may be lost.', shutdown: 'Shut down {pc}?\n\nYou won’t be able to reconnect until someone turns it on (or you wake it with Wake-on-LAN).' }[v].replace('{pc}', remoteInfo?.host || 'the remote PC');
     if (!control || remotePerms.control === false) toast('Remote control is off', 1600);
@@ -1598,6 +1605,61 @@ function onPrivacyReply(m) {
   else if (!m.on && was) toast(m.local ? 'Your partner turned the privacy screen off' : 'Privacy screen off', 2200);
 }
 window.dw.onPrivacyEnded(() => { if (!hostPrivacy) return; hostPrivacy = false; send({ t: 'privacy-r', on: false, local: true }); toast('Your screen is visible again', 2000); });
+
+// ================= REMOTE PC INFO & OPEN A LINK =================
+// Needs the control permission on the host, like the task manager.
+function piAsk(op, data) { return new Promise((res) => { const rid = ++fsReq; fsWait.set(rid, res); send({ t: 'pi', op, rid, ...data }); setTimeout(() => { if (fsWait.has(rid)) { fsWait.delete(rid); res({ error: 'No answer from the remote PC' }); } }, 15000); }); }
+async function onPiRequest(m) {
+  const reply = (d) => send({ t: 'pi-r', rid: m.rid, ...d });
+  if (!P.control || hostPaused) return reply({ error: 'Your partner hasn’t allowed control' });
+  if (m.op === 'info') return reply({ info: await window.dw.sysinfoFull() });
+  if (m.op === 'url') {
+    const r = await window.dw.openUrl(m.url);
+    if (r.ok) toast(`Your partner opened ${r.host} in your browser`, 3000);
+    return reply(r);
+  }
+}
+let piTimer = null, piBusy = false, piFirst = true;
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const fmtUp = (s) => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), mi = Math.floor(s % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${mi}m` : `${mi}m`; };
+const bar = (pct) => `<div class="pi-bar${pct >= 90 ? ' hot' : ''}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;
+async function refreshPi() {
+  if (piBusy) return; piBusy = true;
+  const r = await piAsk('info', {}); piBusy = false;
+  if (!$('pi').classList.contains('open')) return;
+  const body = $('piBody');
+  if (r.error || !r.info) { body.innerHTML = `<div class="fb-msg">${esc(r.error || 'No info')}</div>`; return; }
+  const i = r.info, usedMem = i.mem.total - i.mem.free, memPct = Math.round(usedMem / i.mem.total * 100);
+  const cards = [
+    `<div class="pi-card wide"><h4>Computer</h4><div class="v">${esc(i.host)}</div><div class="s">${esc(i.os)} · ${esc(i.arch)} · signed in as ${esc(i.user)}</div></div>`,
+    `<div class="pi-card"><h4>CPU</h4><div class="v">${i.cpuPct}%</div><div class="s">${esc(i.cpu)} · ${i.cores} cores</div>${bar(i.cpuPct)}</div>`,
+    `<div class="pi-card"><h4>Memory</h4><div class="v">${memPct}%</div><div class="s">${fmtSize(usedMem)} of ${fmtSize(i.mem.total)}</div>${bar(memPct)}</div>`,
+    `<div class="pi-card"><h4>Up for</h4><div class="v">${fmtUp(i.uptime)}</div><div class="s">since ${new Date(Date.now() - i.uptime * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</div></div>`,
+    `<div class="pi-card"><h4>Battery</h4><div class="v">${i.battery ? i.battery.pct + '%' : 'None'}</div><div class="s">${i.battery ? (i.battery.charging ? 'Plugged in' : 'On battery') : 'Desktop PC or no battery found'}</div>${i.battery ? bar(i.battery.pct) : ''}</div>`
+  ];
+  if (i.disks?.length) cards.push(`<div class="pi-card wide"><h4>Disks</h4>${i.disks.map(d => { const pct = Math.round((d.total - d.free) / d.total * 100); return `<div class="pi-row"><span>${esc(d.name)}</span><span>${fmtSize(d.free)} free of ${fmtSize(d.total)}</span></div>${bar(pct)}`; }).join('')}</div>`);
+  if (i.nets?.length) cards.push(`<div class="pi-card wide"><h4>Network</h4>${i.nets.map(n => `<div class="pi-row"><span>${esc(n.name)}</span><span class="mono">${esc(n.ip)} · ${esc(n.mac)}</span></div>`).join('')}</div>`);
+  cards.push(`<div class="pi-card wide"><h4>Screens & UniDesk</h4>${i.displays.map((d, k) => `<div class="pi-row"><span>Screen ${k + 1}${d.primary ? ' (main)' : ''}</span><span>${d.w} × ${d.h} · ${Math.round(d.scale * 100)}%</span></div>`).join('')}<div class="pi-row"><span>UniDesk</span><span>${esc(i.app)}${i.admin === true ? ' · administrator' : i.admin === false ? ' · not administrator' : ''}</span></div></div>`);
+  body.classList.toggle('first', piFirst); piFirst = false;
+  body.innerHTML = cards.join('');
+}
+function togglePi(force) {
+  const open = $('pi').classList.toggle('open', force);
+  $('piBtn').classList.toggle('on', open);
+  clearInterval(piTimer);
+  if (open) { if (!$('piBody').children.length || $('piBody').querySelector('.fb-msg')) { piFirst = true; $('piBody').innerHTML = '<div class="fb-msg">Loading…</div>'; } refreshPi(); piTimer = setInterval(refreshPi, 5000); }
+}
+$('piBtn').onclick = () => togglePi();
+$('piClose').onclick = () => togglePi(false);
+$('piUrl').onsubmit = async (e) => {
+  e.preventDefault();
+  let u = $('piUrlIn').value.trim(); if (!u) return;
+  if (!/^[a-z][a-z\d+.-]*:/i.test(u)) u = 'https://' + u;
+  const btn = $('piUrl').querySelector('button'); btn.disabled = true;
+  const r = await piAsk('url', { url: u }); btn.disabled = false;
+  if (r.error) return toast(r.error, 2600);
+  toast(`Opened ${r.host} on their PC`, 2000); $('piUrlIn').value = '';
+};
 
 // ================= RECORD INCOMING SESSIONS (host) =================
 // A security record of what visitors did on this PC. The visitor is always told.

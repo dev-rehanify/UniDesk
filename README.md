@@ -84,7 +84,11 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 - **Linux:** `UniDesk-x.y.z-linux-x64.AppImage`: run `chmod +x UniDesk-*.AppImage` and open it. Tested on Ubuntu 26.04 (X11); Wayland is not tested yet.
 - **Phone or tablet:** no install needed. Open the [mobile viewer](https://dev-rehanify.github.io/UniDesk/m/) in Safari or Chrome, enter your computer's address and connect. Add it to your home screen to use it like an app.
 
-> Builds aren't code-signed yet. On Windows, SmartScreen / Smart App Control may warn or block it. On macOS, right-click the app and choose **Open** the first time, then allow **Screen Recording** and **Accessibility** in System Settings → Privacy & Security so others can see and control your Mac.
+> **Builds aren't code-signed yet**, so your system may warn you the first time:
+> - **Windows SmartScreen** ("Windows protected your PC"): click **More info** → **Run anyway**.
+> - **Windows Smart App Control** ("blocked an app that may be unsafe"): it has no "run anyway" button and no per-app exception. Unsigned apps can only run if Smart App Control is turned off (Windows Security → App & browser control → Smart App Control settings). Most PCs don't have it on. The [mobile viewer](https://dev-rehanify.github.io/UniDesk/m/) works without installing anything.
+> - **macOS 15 Sequoia and later**: open UniDesk once, then go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** (right-click → Open no longer works). Then allow **Screen Recording** and **Accessibility** there so others can see and control your Mac.
+> - **Linux**: run `chmod +x UniDesk-*.AppImage` first.
 
 **Option B: run from source** (Windows or macOS, [Node.js](https://nodejs.org) 20+):
 

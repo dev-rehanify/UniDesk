@@ -27,7 +27,7 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 
 | | |
 |---|---|
-| 📱 **Mobile viewer** | Control your computer from a phone or tablet browser: tap to click, hold to right-click, two fingers to scroll, pinch to zoom, on-screen keyboard and special keys. Send photos, files and text from the phone to the PC, receive files the PC sends, copy what the PC copied (text or images) with one tap, and chat both ways. Scan the QR code on the PC's home screen to open it already pointed at that PC. |
+| 📱 **Mobile viewer** | Control your computer from a phone or tablet browser: tap to click, hold to right-click, two fingers to scroll, pinch to zoom, on-screen keyboard and special keys. Send photos, files and text from the phone to the PC, receive files the PC sends, copy what the PC copied (text or images) with one tap, and chat both ways. Switch to trackpad mode for precise pointing, and restart, sleep, sign out or shut down the PC from the Power panel. Scan the QR code on the PC's home screen to open it already pointed at that PC. |
 | 🐧 **Linux** | x64 AppImage with automatic updates. |
 | 🔐 **End-to-end encrypted** | WebRTC DTLS-SRTP. Every session needs approval unless *you* enable unattended access. |
 | ⚡ **Fast P2P streaming** | AV1 → VP9 → H.264 codec preference, up to **4K at 60 fps**, low-latency playout, live stats (codec, fps, Mbps, ping). |

@@ -6,12 +6,12 @@
 
 ### UniDesk. Anywhere. Instantly.
 
-**Free, open-source, peer-to-peer remote desktop for Windows and macOS.**<br>
+**Free, open-source, peer-to-peer remote desktop for Windows, macOS and Linux, with a mobile viewer for phones.**<br>
 A fast, private alternative to AnyDesk and TeamViewer, with unattended access, 4K 60 fps AV1 streaming, file transfer and clipboard sync.
 
 [**Website**](https://dev-rehanify.github.io/UniDesk/) · [**Download**](https://github.com/dev-rehanify/UniDesk/releases/latest) · [**Report a bug**](https://github.com/dev-rehanify/UniDesk/issues)
 
-![License: MIT](https://img.shields.io/badge/license-MIT-7b5cff) ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-4f7dff) ![WebRTC P2P](https://img.shields.io/badge/WebRTC-peer--to--peer-22d3c5) ![Price: free](https://img.shields.io/badge/price-free%20forever-2ee59d)
+![License: MIT](https://img.shields.io/badge/license-MIT-7b5cff) ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20mobile-4f7dff) ![WebRTC P2P](https://img.shields.io/badge/WebRTC-peer--to--peer-22d3c5) ![Price: free](https://img.shields.io/badge/price-free%20forever-2ee59d)
 
 <img src="docs/screenshots/home-dark.png" alt="UniDesk remote desktop app home screen in dark mode" width="820">
 
@@ -27,6 +27,8 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 
 | | |
 |---|---|
+| 📱 **Mobile viewer** | Control your computer from a phone or tablet browser: tap to click, hold to right-click, two fingers to scroll, pinch to zoom, on-screen keyboard and special keys. |
+| 🐧 **Linux** | x64 AppImage with automatic updates. |
 | 🔐 **End-to-end encrypted** | WebRTC DTLS-SRTP. Every session needs approval unless *you* enable unattended access. |
 | ⚡ **Fast P2P streaming** | AV1 → VP9 → H.264 codec preference, up to **4K at 60 fps**, low-latency playout, live stats (codec, fps, Mbps, ping). |
 | 🔢 **One-time access codes** | A temporary code (like TeamViewer's password) that works once and then changes. |
@@ -79,6 +81,8 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 
 - **Windows:** `UniDesk-x.y.z-win-x64.exe` (installer) or the `.zip` (portable)
 - **macOS:** `UniDesk-x.y.z-mac-arm64.dmg` (Apple Silicon) or `-mac-x64.dmg` (Intel)
+- **Linux:** `UniDesk-x.y.z-linux-x64.AppImage`: run `chmod +x UniDesk-*.AppImage` and open it. Tested on Ubuntu 26.04 (X11); Wayland is not tested yet.
+- **Phone or tablet:** no install needed. Open the [mobile viewer](https://dev-rehanify.github.io/UniDesk/m/) in Safari or Chrome, enter your computer's address and connect. Add it to your home screen to use it like an app.
 
 > Builds aren't code-signed yet. On Windows, SmartScreen / Smart App Control may warn or block it. On macOS, right-click the app and choose **Open** the first time, then allow **Screen Recording** and **Accessibility** in System Settings → Privacy & Security so others can see and control your Mac.
 
@@ -105,7 +109,8 @@ npm start
 | Open source | **Yes (MIT)** | No | No |
 | Account required | **No** | No | Yes, for many features |
 | Direct peer-to-peer video | **Yes** | Yes | Partly |
-| Windows & macOS | Yes | Yes | Yes |
+| Windows, macOS & Linux | Yes | Yes | Yes |
+| Control from a phone | **Yes, in the browser (no app store)** | App | App |
 | Unattended access | Yes | Yes | Yes |
 | Self-hostable signaling | **Yes** | Enterprise only | Enterprise only |
 
@@ -123,8 +128,8 @@ npm start
 - [x] Windows system service (lock screen, UAC, Ctrl+Alt+Del)
 - [ ] Connect before anyone signs in (after a reboot)
 - [x] macOS builds (via GitHub Actions)
-- [ ] Linux builds
-- [ ] Mobile viewer
+- [x] Linux builds (AppImage)
+- [x] Mobile viewer (in the browser)
 
 ## Networking
 

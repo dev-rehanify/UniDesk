@@ -1,0 +1,14 @@
+{
+  "name": "UniDesk Mobile",
+  "short_name": "UniDesk",
+  "description": "Control your UniDesk computer from your phone.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070a14",
+  "theme_color": "#070a14",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

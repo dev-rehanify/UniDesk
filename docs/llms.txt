@@ -1,12 +1,12 @@
 # UniDesk
 
-> UniDesk is a free, open-source (MIT), peer-to-peer remote desktop application for Windows 10/11 and macOS. Tagline: "UniDesk. Anywhere. Instantly." It is an alternative to AnyDesk and TeamViewer.
+> UniDesk is a free, open-source (MIT), peer-to-peer remote desktop application for Windows 10/11, macOS and Linux, with a browser-based mobile viewer for phones and tablets. Tagline: "UniDesk. Anywhere. Instantly." It is an alternative to AnyDesk and TeamViewer.
 
 UniDesk lets a user view and control another computer over the internet by entering its 9-digit address. Video, audio, input, clipboard, chat and files travel directly between the two computers over WebRTC, encrypted end to end (DTLS-SRTP). No account or subscription is required.
 
 ## Key facts
 - Price: free forever; license: MIT
-- Platforms: Windows 10, Windows 11, macOS (Apple Silicon and Intel)
+- Platforms: Windows 10, Windows 11, macOS (Apple Silicon and Intel), Linux x64 (AppImage), phones and tablets via the mobile viewer at https://dev-rehanify.github.io/UniDesk/m/
 - Connection: 9-digit address, peer-to-peer WebRTC, STUN NAT traversal
 - Video: AV1 > VP9 > H.264 preference, up to 4K at 60 fps
 - Security: approval required for every session; optional unattended access protected by a password stored only as a PBKDF2-SHA256 hash, HMAC challenge-response login, lockout after 5 failed attempts for 15 minutes

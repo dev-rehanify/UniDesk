@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>UniDesk Mobile</title>
+<meta name="description" content="Control your UniDesk computer from your phone. Free, peer-to-peer and encrypted, right in the browser.">
+<meta name="theme-color" content="#070a14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+:root { --bg: #070a14; --panel: rgba(20,24,40,.86); --stroke: rgba(255,255,255,.09); --text: #e9ecf8; --mute: #8f97b3; --a1: #7b5cff; --a2: #4f7dff; --bad: #ff5a6a; --ok: #2ee59d; color-scheme: dark; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overscroll-behavior: none; }
+body { overflow: hidden; }
+button { font: inherit; color: inherit; }
+.view { position: fixed; inset: 0; display: none; }
+.view.on { display: flex; }
+/* home */
+#home { flex-direction: column; align-items: center; justify-content: center; padding: calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom)); gap: 18px;
+  background: radial-gradient(120% 70% at 50% 0%, rgba(123,92,255,.22), transparent 60%), var(--bg); overflow-y: auto; }
+.logo { width: 64px; height: 64px; border-radius: 18px; box-shadow: 0 16px 40px -12px rgba(123,92,255,.7); }
+h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+.tag { margin: -12px 0 0; color: var(--mute); font-size: 14px; }
+.card { width: min(420px, 100%); padding: 18px; border-radius: 20px; background: var(--panel); border: 1px solid var(--stroke); backdrop-filter: blur(20px); }
+.card label { display: block; font-size: 12px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--mute); margin-bottom: 8px; }
+.idin { width: 100%; height: 56px; border-radius: 14px; border: 1px solid var(--stroke); background: rgba(255,255,255,.05); color: var(--text); font: 600 24px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .12em; text-align: center; outline: none; transition: border-color .2s; }
+.idin:focus { border-color: var(--a1); }
+.go { margin-top: 12px; width: 100%; height: 52px; border: 0; border-radius: 14px; background: linear-gradient(135deg, var(--a1), var(--a2)); font-weight: 700; font-size: 16px; box-shadow: 0 12px 30px -12px rgba(123,92,255,.8); transition: transform .15s, opacity .2s; }
+.go:active { transform: scale(.98); }
+.go:disabled { opacity: .5; }
+.hint { min-height: 20px; margin-top: 8px; text-align: center; font-size: 13px; color: var(--bad); }
+.recent { width: min(420px, 100%); display: grid; gap: 8px; }
+.recent h2 { margin: 0 0 2px; font-size: 12px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--mute); }
+.desk { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--stroke); text-align: left; width: 100%; }
+.desk b { display: block; font-size: 14px; }
+.desk small { color: var(--mute); font-family: ui-monospace, Menlo, Consolas, monospace; }
+.desk .av { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; background: linear-gradient(135deg, var(--a1), var(--a2)); flex: none; }
+.desk .x { margin-left: auto; border: 0; background: none; color: var(--mute); font-size: 18px; padding: 4px 8px; }
+.foot { color: var(--mute); font-size: 12px; text-align: center; max-width: 420px; }
+.foot a { color: var(--text); }
+/* overlay sheet (connecting / password) */
+.sheet { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(4,6,14,.72); backdrop-filter: blur(10px); }
+.sheet.on { display: flex; }
+.sheet .card { text-align: center; animation: pop .35s cubic-bezier(.2,1.3,.4,1); }
+.sheet h3 { margin: 6px 0 4px; font-size: 19px; }
+.sheet p { margin: 0 0 14px; color: var(--mute); font-size: 14px; }
+.spin { width: 38px; height: 38px; margin: 4px auto 8px; border-radius: 50%; border: 3px solid rgba(255,255,255,.12); border-top-color: var(--a1); animation: spin .9s linear infinite; }
+.pw { width: 100%; height: 50px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--stroke); background: rgba(255,255,255,.05); color: var(--text); font-size: 16px; outline: none; }
+.pw:focus { border-color: var(--a1); }
+.ghost { margin-top: 8px; width: 100%; height: 46px; border-radius: 14px; border: 1px solid var(--stroke); background: transparent; font-weight: 600; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pop { from { opacity: 0; transform: scale(.94) translateY(8px); } }
+/* session */
+#sess { flex-direction: column; background: #000; }
+#stage { position: relative; flex: 1; overflow: hidden; touch-action: none; }
+#wrap { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+#video { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+#cursor { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 2px rgba(123,92,255,.9); pointer-events: none; opacity: 0; transition: opacity .3s; }
+#cursor.show { opacity: .9; }
+.chip { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 5px 12px; border-radius: 99px; background: rgba(10,12,24,.72); border: 1px solid var(--stroke); font-size: 12.5px; white-space: nowrap; z-index: 5; pointer-events: none; transition: opacity .4s; }
+.chip.dim { opacity: .35; }
+.paused { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.6); font-weight: 650; z-index: 4; }
+.paused.on { display: grid; }
+.keys { display: none; gap: 6px; padding: 8px 10px 0; overflow-x: auto; background: var(--panel); scrollbar-width: none; }
+.keys.on { display: flex; }
+.keys button { flex: none; min-width: 44px; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--stroke); background: rgba(255,255,255,.06); font-size: 13px; font-weight: 600; }
+.keys button.on { background: var(--a1); border-color: var(--a1); }
+.bar { display: flex; justify-content: space-around; gap: 4px; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--stroke); }
+.bar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; border: 0; border-radius: 12px; background: transparent; font-size: 11px; color: var(--mute); }
+.bar button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bar button.on { color: var(--text); background: rgba(123,92,255,.22); }
+.bar button.end { color: var(--bad); }
+#kb { position: fixed; left: -200px; top: 0; width: 120px; height: 40px; opacity: 0; font-size: 16px; }
+.toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(10px); padding: 10px 16px; border-radius: 12px; background: rgba(20,24,40,.95); border: 1px solid var(--stroke); font-size: 13.5px; opacity: 0; transition: .25s; z-index: 40; pointer-events: none; max-width: 90vw; text-align: center; }
+.toast.on { opacity: 1; transform: translateX(-50%); }
+.help { margin: 10px 0 0; padding: 0; list-style: none; color: var(--mute); font-size: 13px; text-align: left; display: grid; gap: 4px; }
+.help b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<section class="view on" id="home">
+  <img class="logo" src="icon.png" alt="">
+  <h1>UniDesk Mobile</h1>
+  <p class="tag">Control your computer from your phone</p>
+  <form class="card" id="goForm" autocomplete="off">
+    <label for="idIn">Desk address</label>
+    <input class="idin" id="idIn" inputmode="numeric" placeholder="123 456 789" maxlength="11">
+    <button class="go" id="goBtn" type="submit">Connect</button>
+    <div class="hint" id="hint"></div>
+    <ul class="help">
+      <li><b>Tap</b> to click · <b>hold</b> to right-click · <b>drag</b> to drag</li>
+      <li><b>Two fingers</b> to scroll · <b>pinch</b> to zoom</li>
+    </ul>
+  </form>
+  <div class="recent" id="recent"></div>
+  <p class="foot">Works with the free <a href="../" target="_blank" rel="noopener">UniDesk</a> app on Windows, macOS and Linux. Peer-to-peer and encrypted: your screen never passes through our servers. Your address: <span id="myIdTxt">…</span></p>
+</section>
+
+<section class="view" id="sess">
+  <div id="stage">
+    <div id="wrap"><video id="video" autoplay playsinline muted></video></div>
+    <div id="cursor"></div>
+    <div class="chip" id="chip">Connecting…</div>
+    <div class="paused" id="paused">Your partner paused sharing</div>
+  </div>
+  <div class="keys" id="keys">
+    <button data-k="Escape">Esc</button><button data-k="Tab">Tab</button>
+    <button data-mod="ControlLeft">Ctrl</button><button data-mod="AltLeft">Alt</button><button data-mod="ShiftLeft">Shift</button>
+    <button data-k="MetaLeft">Win</button>
+    <button data-k="ArrowLeft">←</button><button data-k="ArrowUp">↑</button><button data-k="ArrowDown">↓</button><button data-k="ArrowRight">→</button>
+    <button data-k="Backspace">⌫</button><button data-k="Delete">Del</button><button data-k="Enter">↵</button>
+    <button data-combo="ControlLeft,KeyC">Copy</button><button data-combo="ControlLeft,KeyV">Paste</button><button data-combo="ControlLeft,KeyZ">Undo</button>
+    <button data-combo="ControlLeft,ShiftLeft,Escape">Task Mgr</button><button data-cad="1">Ctrl+Alt+Del</button>
+  </div>
+  <nav class="bar">
+    <button id="kbBtn"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 15h10"/></svg>Keyboard</button>
+    <button id="keysBtn"><svg viewBox="0 0 24 24"><path d="M15 7a4 4 0 1 1-3.9 4.9L3 20l-1-1 1-3 2 1 1-2 2 1 2.1-2.1A4 4 0 0 1 15 7z"/></svg>Keys</button>
+    <button id="scrBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span id="scrTxt">Screen 1</span></button>
+    <button id="hdBtn"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4z"/><path d="M8 10v4M8 12h3M11 10v4M14 10v4h1.5a2 2 0 0 0 0-4z"/></svg>HD</button>
+    <button id="endBtn" class="end"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>End</button>
+  </nav>
+  <textarea id="kb" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+</section>
+
+<div class="sheet" id="waitSheet"><div class="card"><div class="spin"></div><h3 id="waitTitle">Calling…</h3><p id="waitSub">Waiting for your partner to accept</p><button class="ghost" id="cancelBtn">Cancel</button></div></div>
+<form class="sheet" id="pwSheet" autocomplete="off"><div class="card"><h3 id="pwTitle">This desk is protected</h3><p id="pwSub">Enter its access password or one-time code, or ask the person there to let you in.</p>
+  <input class="pw" id="pwIn" type="password" placeholder="Password or code" autocomplete="off">
+  <button class="go" id="pwGo" type="submit">Unlock</button><button class="ghost" id="askBtn" type="button">Ask to be let in</button><button class="ghost" id="pwCancel" type="button">Cancel</button>
+  <div class="hint" id="pwErr"></div></div></form>
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" integrity="sha384-x0YgkOr/3UOZP2CRDxGW9e0Q+2Qjyr3uJrm4xU32Y7ZCNAo7Cc7bjhrZMi/dwczu" crossorigin="anonymous"></script>
+<script>
+'use strict';
+// ---------- basics ----------
+const $ = (id) => document.getElementById(id);
+const PREFIX = 'unidesk-';
+const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.cloudflare.com:3478' }], iceCandidatePoolSize: 4 };
+const fmt = (id) => String(id).replace(/(\d{3})(?=\d)/g, '$1 ');
+let toastT; function toast(m, ms = 2200) { const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
+const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+function show(v) { document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === v)); }
+function sheet(id) { ['waitSheet', 'pwSheet'].forEach(s => $(s).classList.toggle('on', s === id)); }
+
+// ---------- identity & signaling ----------
+let peer = null, myId = store.get('udm-id', null), conn = null, call = null, target = null, auth = null, inSession = false, connectTimer = null;
+if (!/^\d{9}$/.test(myId || '')) { myId = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000000 + 100000000); store.set('udm-id', myId); }
+$('myIdTxt').textContent = fmt(myId);
+function startPeer() {
+  if (typeof Peer === 'undefined') { $('hint').textContent = 'Couldn’t load the connection library. Check your internet connection.'; return; }
+  peer = new Peer(PREFIX + myId, { config: ICE, debug: 0 });
+  peer.on('error', (e) => {
+    if (e.type === 'unavailable-id') { myId = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000000 + 100000000); store.set('udm-id', myId); $('myIdTxt').textContent = fmt(myId); peer.destroy(); startPeer(); return; }
+    if (e.type === 'peer-unavailable') return fail('Desk not found. That address is offline or doesn’t exist.');
+    if (!inSession && target) fail('Network problem: ' + e.type);
+  });
+  peer.on('disconnected', () => { setTimeout(() => { if (peer && !peer.destroyed) peer.reconnect(); }, 1500); });
+  peer.on('call', onCall);
+}
+startPeer();
+
+// ---------- recent desks ----------
+function recents() { return store.get('udm-recent', []).filter(x => /^\d{9}$/.test(x.id)); }
+function saveRecent(id, name) { const r = recents().filter(x => x.id !== id); const old = recents().find(x => x.id === id); r.unshift({ id, name: name || old?.name || '' }); store.set('udm-recent', r.slice(0, 8)); renderRecent(); }
+function renderRecent() {
+  const r = recents(), box = $('recent'); box.innerHTML = r.length ? '<h2>Recent</h2>' : '';
+  r.forEach(x => {
+    const b = document.createElement('div'); b.className = 'desk'; b.setAttribute('role', 'button');
+    b.innerHTML = '<span class="av"></span><span><b></b><small></small></span><button class="x" aria-label="Remove">×</button>';
+    b.querySelector('.av').textContent = (x.name || '#')[0].toUpperCase(); b.querySelector('b').textContent = x.name || 'Desk'; b.querySelector('small').textContent = fmt(x.id);
+    b.onclick = (e) => { if (e.target.closest('.x')) { store.set('udm-recent', recents().filter(y => y.id !== x.id)); renderRecent(); return; } connectTo(x.id); };
+    box.appendChild(b);
+  });
+}
+renderRecent();
+$('idIn').addEventListener('input', (e) => { const d = e.target.value.replace(/\D/g, '').slice(0, 9); e.target.value = fmt(d); $('hint').textContent = ''; });
+$('goForm').onsubmit = (e) => { e.preventDefault(); connectTo($('idIn').value); };
+const qid = new URLSearchParams(location.search).get('id'); if (qid) $('idIn').value = fmt(qid.replace(/\D/g, '').slice(0, 9));
+
+// ---------- messages (same format as the desktop app; large ones arrive in pieces) ----------
+const MAX_MSG = 12000; let msgSeq = 0;
+function send(m) {
+  if (!conn?.open) return false;
+  const s = JSON.stringify(m);
+  if (s.length <= MAX_MSG) { conn.send(m); return true; }
+  const id = ++msgSeq, n = Math.ceil(s.length / MAX_MSG);
+  for (let i = 0; i < n; i++) conn.send({ t: '_c', id, i, n, s: s.slice(i * MAX_MSG, (i + 1) * MAX_MSG) });
+  return true;
+}
+let remotePerms = { control: true }, screens = [], curScreen = 0, remoteName = '';
+const canControl = () => inSession && remotePerms.control !== false;
+const input = (m) => canControl() && send(m);
+
+// ---------- connecting ----------
+function connectTo(raw) {
+  const id = String(raw).replace(/\D/g, '');
+  if (id.length !== 9) { $('hint').textContent = 'Addresses are 9 digits.'; return; }
+  if (!peer || peer.destroyed) startPeer();
+  if (!peer) return;
+  if (conn) return;
+  target = id; auth = null; inSession = false;
+  $('waitTitle').textContent = 'Calling ' + fmt(id); $('waitSub').textContent = 'Connecting…'; sheet('waitSheet');
+  const go = () => {
+    conn = peer.connect(PREFIX + id, { reliable: true, serialization: 'json' });
+    const my = conn;
+    my.on('open', () => { wire(my); send({ t: 'vinfo', name: deviceName() }); });
+    my.on('close', () => conn === my && dropped());
+    my.on('error', () => conn === my && dropped());
+    clearTimeout(connectTimer); connectTimer = setTimeout(() => { if (!call) fail('Your partner didn’t respond in time.'); }, 60000);
+  };
+  if (peer.open) go(); else peer.once('open', go);
+}
+function deviceName() { const ua = navigator.userAgent; return (/iPad/.test(ua) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android phone' : 'Phone') + ' (UniDesk Mobile)'; }
+function fail(msg) {
+  clearTimeout(connectTimer);
+  try { call?.close(); } catch {} try { conn?.close(); } catch {}
+  call = conn = null; target = null; inSession = false;
+  sheet(null); show('home'); $('hint').textContent = msg;
+}
+function dropped() {
+  if (!conn && !call) return;
+  const was = inSession; fail(was ? '' : 'The connection closed.');
+  if (was) toast('Session ended', 2200);
+}
+$('cancelBtn').onclick = () => fail('');
+$('pwCancel').onclick = () => fail('');
+$('askBtn').onclick = () => { send({ t: 'ask' }); $('waitTitle').textContent = 'Calling ' + fmt(target); $('waitSub').textContent = 'Waiting for your partner to accept…'; sheet('waitSheet'); };
+$('endBtn').onclick = () => { send({ t: 'bye' }); setTimeout(() => fail(''), 150); toast('Session ended', 1800); };
+
+// ---------- unattended password / one-time code (same proof as the desktop app; the password never leaves the phone) ----------
+const hex = (buf) => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+const unhex = (h) => new Uint8Array(String(h).match(/../g).map(x => parseInt(x, 16)));
+async function proofFor(secret, salt, nonce, iter) {
+  const enc = new TextEncoder();
+  const base = await crypto.subtle.importKey('raw', enc.encode(String(secret)), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unhex(salt), iterations: iter }, base, 256);
+  const hk = await crypto.subtle.importKey('raw', bits, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return hex(await crypto.subtle.sign('HMAC', hk, enc.encode(String(nonce))));
+}
+const normCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function showPw(err, locked) {
+  $('pwTitle').textContent = fmt(target) + ' is protected'; $('pwErr').textContent = err || '';
+  $('pwIn').disabled = $('pwGo').disabled = !!locked; $('pwGo').textContent = 'Unlock'; sheet('pwSheet');
+  if (!locked) setTimeout(() => $('pwIn').focus(), 150);
+}
+$('pwSheet').onsubmit = async (e) => {
+  e.preventDefault(); const pw = $('pwIn').value; if (!pw || !auth?.nonce) return;
+  if (!crypto.subtle) return showPw('This page must be opened over https to use passwords.');
+  $('pwGo').disabled = true; $('pwGo').textContent = 'Checking…';
+  const it = Math.min(Math.max(+auth.iter || 310000, 100000), 2000000);
+  const [proof, codeProof] = await Promise.all([proofFor(pw, auth.salt, auth.nonce, it), proofFor(normCode(pw), auth.salt, auth.nonce, it)]);
+  send({ t: 'auth-reply', proof, codeProof });
+};
+
+// ---------- incoming data ----------
+function wire(c) {
+  const parts = new Map();
+  c.on('data', (raw) => {
+    let m = raw;
+    if (raw && raw.t === '_c') {
+      let e = parts.get(raw.id); if (!e) { e = { s: new Array(raw.n), got: 0 }; parts.set(raw.id, e); }
+      if (e.s[raw.i] === undefined) { e.s[raw.i] = raw.s; e.got++; }
+      if (e.got < raw.n) return;
+      parts.delete(raw.id); try { m = JSON.parse(e.s.join('')); } catch { return; }
+    }
+    if (!m || typeof m.t !== 'string') return;
+    switch (m.t) {
+      case 'wait': if (!call) { $('waitTitle').textContent = 'Calling ' + fmt(target); $('waitSub').textContent = 'Waiting for your partner to accept…'; sheet('waitSheet'); } break;
+      case 'auth': auth = m; showPw(''); break;
+      case 'auth-fail': auth = m; showPw(`Wrong password or code · ${m.left} ${m.left === 1 ? 'try' : 'tries'} left`); break;
+      case 'auth-locked': showPw(`Too many wrong attempts. Locked for ${m.mins} min. You can still ask to be let in.`, true); break;
+      case 'denied': fail('Your partner declined the request.'); break;
+      case 'busy': fail('That desk is already in a session.'); break;
+      case 'blocked': fail('That desk only accepts connections from approved addresses.'); break;
+      case 'bye': break;
+      case 'info': remoteName = m.host || ''; chip(); if (target) saveRecent(target, remoteName); break;
+      case 'perms': { const was = remotePerms.control; remotePerms = m; chip(); if (was !== false && m.control === false) toast('View only: your partner turned off control', 2600); if (was === false && m.control) toast('You can control the PC again', 2000); break; }
+      case 'paused': $('paused').classList.toggle('on', !!m.on); break;
+      case 'screens': screens = m.list || []; curScreen = m.cur || 0; renderScr(); break;
+      case 'screen': curScreen = m.i; renderScr(); toast('Now viewing Screen ' + (m.i + 1), 1500); break;
+      case 'chat': toast('💬 ' + String(m.text || '').slice(0, 140), 4000); break;
+    }
+  });
+}
+function onCall(c) {
+  if (!conn || c.peer !== conn.peer) { c.close(); return; }
+  call = c; clearTimeout(connectTimer);
+  c.answer();
+  c.on('stream', (s) => {
+    const v = $('video'); if (v.srcObject !== s) { v.srcObject = s; v.play().catch(() => {}); }
+    if (inSession) return;
+    inSession = true; sheet(null); show('sess'); resetView(); chip();
+    send({ t: 'quality', q: hd ? 'balanced' : 'speed' });
+    if (target) saveRecent(target, remoteName);
+    toast('Connected · tap to click, two fingers to scroll', 2600);
+  });
+  c.on('close', () => call === c && dropped());
+}
+function chip() { $('chip').textContent = (remoteName || fmt(target || '')) + (remotePerms.control === false ? ' · view only' : '') + (hd ? ' · HD' : ''); }
+function renderScr() {
+  $('scrBtn').style.display = screens.length > 1 ? '' : 'none';
+  $('scrTxt').textContent = 'Screen ' + (curScreen + 1);
+}
+$('scrBtn').onclick = () => { if (screens.length > 1) send({ t: 'monitor', i: (curScreen + 1) % screens.length }); };
+let hd = store.get('udm-hd', false); $('hdBtn').classList.toggle('on', hd);
+$('hdBtn').onclick = () => { hd = !hd; store.set('udm-hd', hd); $('hdBtn').classList.toggle('on', hd); send({ t: 'quality', q: hd ? 'balanced' : 'speed' }); chip(); toast(hd ? 'HD: sharper, uses more data' : 'Data saver: smoother on mobile networks', 1800); };
+
+// ---------- touch: tap = click, hold = right-click, drag = drag, two fingers = scroll / pinch-zoom / pan ----------
+const stage = $('stage'), wrap = $('wrap'), video = $('video'), cur = $('cursor');
+let view = { s: 1, x: 0, y: 0 };
+function applyView() { wrap.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`; }
+function resetView() { view = { s: 1, x: 0, y: 0 }; applyView(); }
+function clampView() {
+  const W = stage.clientWidth, H = stage.clientHeight;
+  view.s = Math.min(5, Math.max(1, view.s));
+  view.x = Math.min(0, Math.max(W - W * view.s, view.x)); view.y = Math.min(0, Math.max(H - H * view.s, view.y));
+}
+// screen point -> 0..1 position on the remote desktop (null when outside the picture)
+function norm(px, py) {
+  const r = video.getBoundingClientRect(), vw = video.videoWidth || r.width, vh = video.videoHeight || r.height;
+  const sc = Math.min(r.width / vw, r.height / vh), w = vw * sc, h = vh * sc, ox = r.left + (r.width - w) / 2, oy = r.top + (r.height - h) / 2;
+  const x = (px - ox) / w, y = (py - oy) / h;
+  return x < 0 || y < 0 || x > 1 || y > 1 ? null : { x, y };
+}
+function showCursor(px, py) { const s = stage.getBoundingClientRect(); cur.style.left = (px - s.left) + 'px'; cur.style.top = (py - s.top) + 'px'; cur.classList.add('show'); clearTimeout(cur._t); cur._t = setTimeout(() => cur.classList.remove('show'), 900); }
+let one = null, two = null;
+const pt = (t) => ({ x: t.clientX, y: t.clientY });
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+stage.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 1 && !two) {
+    const p = pt(e.touches[0]);
+    one = { start: p, last: p, t: Date.now(), drag: false, held: false };
+    one.timer = setTimeout(() => {
+      if (!one || one.drag) return; one.held = true;
+      const n = norm(p.x, p.y); if (!n) return;
+      input({ t: 'move', ...n }); input({ t: 'down', b: 2 }); input({ t: 'up', b: 2 });
+      showCursor(p.x, p.y); if (navigator.vibrate) navigator.vibrate(15);
+    }, 550);
+  } else if (e.touches.length >= 2) {
+    if (one) { clearTimeout(one.timer); if (one.drag) input({ t: 'up', b: 0 }); one = null; }
+    const a = pt(e.touches[0]), b = pt(e.touches[1]);
+    two = { d0: dist(a, b), m0: mid(a, b), lastM: mid(a, b), v0: { ...view }, mode: null, acc: 0 };
+  }
+}, { passive: false });
+stage.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (two && e.touches.length >= 2) {
+    const a = pt(e.touches[0]), b = pt(e.touches[1]), m = mid(a, b), ratio = dist(a, b) / two.d0;
+    if (!two.mode) {
+      if (Math.abs(ratio - 1) > 0.08) two.mode = 'zoom';
+      else if (dist(m, two.m0) > 12) two.mode = view.s > 1.01 ? 'zoom' : 'scroll';
+    }
+    if (two.mode === 'zoom') {
+      // keep the picture point that was under the fingers at the start under the fingers now
+      const r = stage.getBoundingClientRect(), s = Math.min(5, Math.max(1, two.v0.s * ratio));
+      const lx = (two.m0.x - r.left - two.v0.x) / two.v0.s, ly = (two.m0.y - r.top - two.v0.y) / two.v0.s;
+      view = { s, x: m.x - r.left - s * lx, y: m.y - r.top - s * ly };
+      clampView(); applyView();
+    } else if (two.mode === 'scroll') {
+      two.acc += (two.lastM.y - m.y);
+      while (Math.abs(two.acc) >= 28) { const sgn = Math.sign(two.acc); input({ t: 'wheel', dy: sgn * 50, dx: 0 }); two.acc -= sgn * 28; }
+    }
+    two.lastM = m; return;
+  }
+  if (!one || e.touches.length !== 1) return;
+  const p = pt(e.touches[0]);
+  if (!one.drag && !one.held && dist(p, one.start) > 10) {
+    clearTimeout(one.timer); one.drag = true;
+    const n = norm(one.start.x, one.start.y); if (n) { input({ t: 'move', ...n }); input({ t: 'down', b: 0 }); }
+  }
+  if (one.drag) { const n = norm(p.x, p.y); if (n) input({ t: 'move', ...n }); showCursor(p.x, p.y); }
+  one.last = p;
+}, { passive: false });
+stage.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  if (two) { if (e.touches.length === 0) two = null; return; }
+  if (!one) return;
+  clearTimeout(one.timer);
+  if (one.drag) input({ t: 'up', b: 0 });
+  else if (!one.held && Date.now() - one.t < 550) {
+    const n = norm(one.start.x, one.start.y);
+    if (n) { input({ t: 'move', ...n }); input({ t: 'down', b: 0 }); input({ t: 'up', b: 0 }); showCursor(one.start.x, one.start.y); }
+  }
+  one = null;
+}, { passive: false });
+stage.addEventListener('touchcancel', () => { if (one?.drag) input({ t: 'up', b: 0 }); clearTimeout(one?.timer); one = two = null; });
+window.addEventListener('resize', () => { clampView(); applyView(); });
+// a mouse (desktop browser, tablet with trackpad) also works
+stage.addEventListener('mousedown', (e) => { const n = norm(e.clientX, e.clientY); if (n) { input({ t: 'move', ...n }); input({ t: 'down', b: e.button }); } });
+stage.addEventListener('mouseup', (e) => input({ t: 'up', b: e.button }));
+stage.addEventListener('mousemove', (e) => { if (e.buttons) { const n = norm(e.clientX, e.clientY); if (n) input({ t: 'move', ...n }); } });
+stage.addEventListener('wheel', (e) => { e.preventDefault(); input({ t: 'wheel', dy: e.deltaY, dx: e.deltaX }); }, { passive: false });
+stage.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ---------- keyboard ----------
+// The hidden text box keeps a fixed filler; whatever is added is typed on the PC, whatever is removed becomes Backspace.
+const kb = $('kb'), FILL = '    ';
+let composing = false, mods = new Set();
+function resetKb() { kb.value = FILL; try { kb.setSelectionRange(FILL.length, FILL.length); } catch {} }
+function key(code) { input({ t: 'kd', c: code }); input({ t: 'ku', c: code }); }
+function charCode(ch) { return /[a-z]/i.test(ch) ? 'Key' + ch.toUpperCase() : /\d/.test(ch) ? 'Digit' + ch : ch === ' ' ? 'Space' : null; }
+function typeText(text) {
+  if (mods.size) { // Ctrl / Alt / Shift held from the key row: send a shortcut for the first character
+    const c = charCode(text[0]); if (c) input({ t: 'combo', keys: [...mods, c] });
+    mods.clear(); document.querySelectorAll('[data-mod]').forEach(b => b.classList.remove('on')); text = text.slice(1); if (!text) return;
+  }
+  const lines = text.split('\n');
+  lines.forEach((ln, i) => { if (ln) input({ t: 'type', text: ln }); if (i < lines.length - 1) key('Enter'); });
+}
+function readKb() {
+  const v = kb.value;
+  if (v.startsWith(FILL)) { const add = v.slice(FILL.length); if (add) typeText(add); }
+  else { let k = 0; while (k < v.length && k < FILL.length && v[k] === FILL[k]) k++; const del = FILL.length - k; for (let i = 0; i < del; i++) key('Backspace'); const add = v.slice(k); if (add) typeText(add); }
+  resetKb();
+}
+kb.addEventListener('compositionstart', () => { composing = true; });
+kb.addEventListener('compositionend', () => { composing = false; readKb(); });
+kb.addEventListener('input', () => { if (!composing) readKb(); });
+kb.addEventListener('keydown', (e) => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Escape', 'Tab'].includes(e.key)) { e.preventDefault(); key(e.key); } });
+kb.addEventListener('blur', () => $('kbBtn').classList.remove('on'));
+$('kbBtn').onclick = () => {
+  if (document.activeElement === kb) { kb.blur(); return; }
+  if (!canControl()) return toast('View only: your partner turned off control', 2000);
+  resetKb(); kb.focus(); $('kbBtn').classList.add('on');
+};
+$('keysBtn').onclick = () => { const on = $('keys').classList.toggle('on'); $('keysBtn').classList.toggle('on', on); };
+$('keys').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (!canControl()) return toast('View only: your partner turned off control', 2000);
+  if (b.dataset.mod) { const m = b.dataset.mod; mods.has(m) ? mods.delete(m) : mods.add(m); b.classList.toggle('on', mods.has(m)); return; }
+  if (b.dataset.cad) { input({ t: 'cad' }); toast('Sent Ctrl+Alt+Del', 1600); return; }
+  if (b.dataset.combo) { input({ t: 'combo', keys: b.dataset.combo.split(',') }); return; }
+  if (b.dataset.k) {
+    if (mods.size) { input({ t: 'combo', keys: [...mods, b.dataset.k] }); mods.clear(); document.querySelectorAll('[data-mod]').forEach(x => x.classList.remove('on')); }
+    else key(b.dataset.k);
+  }
+});
+// keep the session alive when the phone locks briefly; release held buttons if the page is hidden
+document.addEventListener('visibilitychange', () => { if (document.hidden && one?.drag) { input({ t: 'up', b: 0 }); one = null; } });
+</script>
+</body>
+</html>

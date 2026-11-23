@@ -106,8 +106,23 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
 .inbox-item .x { background: transparent; color: var(--mute); padding: 0 6px; font-size: 18px; }
 .inbox-item .bar2 { height: 4px; margin-top: 6px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
 .inbox-item .bar2 i { display: block; height: 100%; width: 0; background: var(--a1); }
+.pwr .ghost.danger { color: var(--bad); border-color: rgba(255,90,106,.35); }
+#cursor.tp { opacity: .95; transition: none; width: 18px; height: 18px; margin: -9px 0 0 -9px; background: rgba(123,92,255,.35); }
+#cursor.tp.press { background: var(--a1); }
 .help { margin: 10px 0 0; padding: 0; list-style: none; color: var(--mute); font-size: 13px; text-align: left; display: grid; gap: 4px; }
 .help b { color: var(--text); font-weight: 600; }
+/* ===== responsive: every size of phone and tablet, upright or sideways ===== */
+.desk .x, .inbox-item .x { min-width: 40px; min-height: 40px; display: grid; place-items: center; }   /* big enough to tap */
+.sheet .card { max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); overflow-y: auto; }   /* never taller than the screen */
+@media (max-width: 400px) { .row2 { grid-template-columns: 1fr; } }   /* small phones: stack the two text buttons */
+@media (max-height: 500px) and (orientation: landscape) {   /* phone held sideways: keep the picture as big as possible */
+  .bar { padding: 4px 8px calc(4px + env(safe-area-inset-bottom)); }
+  .bar button { flex-direction: row; justify-content: center; gap: 6px; padding: 7px 4px; font-size: 12.5px; }
+  .bar button svg { width: 18px; height: 18px; }
+  .keys { padding-top: 5px; }
+  .keys button { height: 32px; }
+  .dot { top: 2px; right: 8px; }
+}
 </style>
 </head>
 <body>
@@ -140,6 +155,7 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
   </div>
   <div class="keys" id="keys">
     <button id="hdBtn">HD</button><button id="scrBtn" style="display:none"><span id="scrTxt">Screen 1</span></button>
+    <button id="tpBtn" title="Trackpad: drag to move the pointer, tap to click">Trackpad</button><button id="pwrBtn">Power</button>
     <button data-k="Escape">Esc</button><button data-k="Tab">Tab</button>
     <button data-mod="ControlLeft">Ctrl</button><button data-mod="AltLeft">Alt</button><button data-mod="ShiftLeft">Shift</button>
     <button data-k="MetaLeft">Win</button>
@@ -178,6 +194,15 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
   <form class="chat-in" id="chatForm" autocomplete="off"><input class="pw" id="chatIn" placeholder="Message" maxlength="2000"><button class="go" type="submit">Send</button></form>
   <button class="ghost" id="chatClose" type="button">Close</button>
 </div></div>
+<div class="sheet" id="pwrSheet"><div class="card pwr">
+  <h3>Power</h3>
+  <p id="pwrSub">Control the PC you’re connected to.</p>
+  <button class="ghost" data-pwr="reboot" type="button">Restart</button>
+  <button class="ghost" data-pwr="sleep" type="button">Sleep</button>
+  <button class="ghost" data-pwr="signout" type="button">Sign out</button>
+  <button class="ghost danger" data-pwr="shutdown" type="button">Shut down</button>
+  <button class="ghost" id="pwrClose" type="button">Close</button>
+</div></div>
 <div class="toast" id="toast"></div>
 
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" integrity="sha384-x0YgkOr/3UOZP2CRDxGW9e0Q+2Qjyr3uJrm4xU32Y7ZCNAo7Cc7bjhrZMi/dwczu" crossorigin="anonymous"></script>
@@ -191,7 +216,7 @@ const fmt = (id) => String(id).replace(/(\d{3})(?=\d)/g, '$1 ');
 let toastT; function toast(m, ms = 2200) { const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 function show(v) { document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === v)); }
-function sheet(id) { ['waitSheet', 'pwSheet', 'sendSheet', 'chatSheet'].forEach(s => $(s).classList.toggle('on', s === id)); }
+function sheet(id) { ['waitSheet', 'pwSheet', 'sendSheet', 'chatSheet', 'pwrSheet'].forEach(s => $(s).classList.toggle('on', s === id)); }
 
 // ---------- identity & signaling ----------
 let peer = null, myId = store.get('udm-id', null), conn = null, call = null, target = null, auth = null, inSession = false, connectTimer = null;
@@ -272,7 +297,7 @@ function fail(msg) {
 }
 function dropped() {
   if (!conn && !call) return;
-  const was = inSession; fail(was ? '' : 'The connection closed.');
+  const was = inSession, note = powerNote; powerNote = ''; fail(was ? note : 'The connection closed.');
   if (was) toast('Session ended', 2200);
 }
 $('cancelBtn').onclick = () => fail('');
@@ -332,6 +357,8 @@ function wire(c) {
       case 'screens': screens = m.list || []; curScreen = m.cur || 0; renderScr(); break;
       case 'screen': curScreen = m.i; renderScr(); toast('Now viewing Screen ' + (m.i + 1), 1500); break;
       case 'chat': addChat(String(m.text || ''), false); break;
+      case 'power-r': onPowerReply(m); break;
+      case 'reboot-r': onPowerReply({ ...m, what: 'reboot' }); break;
       case 'clip': if (typeof m.text === 'string') onPcClip(m.text); break;
       case 'ci': onPcClipImage(m); break;
       case 'file-start': onFileStart(m); break;
@@ -347,7 +374,8 @@ function onCall(c) {
   c.on('stream', (s) => {
     const v = $('video'); if (v.srcObject !== s) { v.srcObject = s; v.play().catch(() => {}); }
     if (inSession) return;
-    inSession = true; sheet(null); show('sess'); resetView(); chip();
+    inSession = true; sheet(null); show('sess'); resetView(); chip(); tp.x = tp.y = 0.5; setTp(tp.on);
+    video.addEventListener('loadedmetadata', () => { if (tp.on) placeCursor(); }, { once: true });
     send({ t: 'quality', q: hd ? 'balanced' : 'speed' });
     if (target) saveRecent(target, remoteName);
     toast('Connected · tap to click, two fingers to scroll', 2600);
@@ -366,7 +394,30 @@ $('hdBtn').onclick = () => { hd = !hd; store.set('udm-hd', hd); $('hdBtn').class
 // ---------- touch: tap = click, hold = right-click, drag = drag, two fingers = scroll / pinch-zoom / pan ----------
 const stage = $('stage'), wrap = $('wrap'), video = $('video'), cur = $('cursor');
 let view = { s: 1, x: 0, y: 0 };
-function applyView() { wrap.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`; }
+function applyView() { wrap.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`; if (tp.on) placeCursor(); }
+// ---------- trackpad mode: the finger moves a pointer like a laptop trackpad ----------
+// drag = move the pointer · tap = click where the pointer is · two-finger tap = right-click · hold, then drag = drag
+const tp = { on: !!store.get('udm-tp', false), x: 0.5, y: 0.5 };
+function picRect() {   // where the remote picture is drawn on screen (after zoom)
+  const r = video.getBoundingClientRect(), vw = video.videoWidth || r.width, vh = video.videoHeight || r.height;
+  const sc = Math.min(r.width / vw, r.height / vh), w = vw * sc, h = vh * sc;
+  return { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, w, h };
+}
+function placeCursor() {
+  const p = picRect(), s = stage.getBoundingClientRect();
+  cur.style.left = (p.left + tp.x * p.w - s.left) + 'px'; cur.style.top = (p.top + tp.y * p.h - s.top) + 'px';
+}
+function setTp(on) {
+  tp.on = !!on; store.set('udm-tp', tp.on);
+  $('tpBtn').classList.toggle('on', tp.on); cur.classList.toggle('tp', tp.on); cur.classList.toggle('show', tp.on);
+  if (tp.on) { clearTimeout(cur._t); placeCursor(); }
+}
+function tpMove(dxPx, dyPx) {
+  const p = picRect(); if (!p.w || !p.h) return;
+  tp.x = Math.min(1, Math.max(0, tp.x + dxPx / p.w)); tp.y = Math.min(1, Math.max(0, tp.y + dyPx / p.h));
+  placeCursor(); input({ t: 'move', x: tp.x, y: tp.y });
+}
+const tpClick = (b) => { input({ t: 'move', x: tp.x, y: tp.y }); input({ t: 'down', b }); input({ t: 'up', b }); };
 function resetView() { view = { s: 1, x: 0, y: 0 }; applyView(); }
 function clampView() {
   const W = stage.clientWidth, H = stage.clientHeight;
@@ -380,13 +431,22 @@ function norm(px, py) {
   const x = (px - ox) / w, y = (py - oy) / h;
   return x < 0 || y < 0 || x > 1 || y > 1 ? null : { x, y };
 }
-function showCursor(px, py) { const s = stage.getBoundingClientRect(); cur.style.left = (px - s.left) + 'px'; cur.style.top = (py - s.top) + 'px'; cur.classList.add('show'); clearTimeout(cur._t); cur._t = setTimeout(() => cur.classList.remove('show'), 900); }
+function showCursor(px, py) { if (tp.on) return; const s = stage.getBoundingClientRect(); cur.style.left = (px - s.left) + 'px'; cur.style.top = (py - s.top) + 'px'; cur.classList.add('show'); clearTimeout(cur._t); cur._t = setTimeout(() => cur.classList.remove('show'), 900); }
 let one = null, two = null;
 const pt = (t) => ({ x: t.clientX, y: t.clientY });
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 stage.addEventListener('touchstart', (e) => {
   e.preventDefault();
+  if (e.touches.length === 1 && !two && tp.on) {
+    const p = pt(e.touches[0]);
+    one = { tp: true, start: p, last: p, t: Date.now(), moved: false, held: false };
+    one.timer = setTimeout(() => {   // held still: start a drag from where the pointer is
+      if (!one || one.moved) return; one.held = true; cur.classList.add('press');
+      input({ t: 'move', x: tp.x, y: tp.y }); input({ t: 'down', b: 0 }); if (navigator.vibrate) navigator.vibrate(15);
+    }, 450);
+    return;
+  }
   if (e.touches.length === 1 && !two) {
     const p = pt(e.touches[0]);
     one = { start: p, last: p, t: Date.now(), drag: false, held: false };
@@ -397,9 +457,9 @@ stage.addEventListener('touchstart', (e) => {
       showCursor(p.x, p.y); if (navigator.vibrate) navigator.vibrate(15);
     }, 550);
   } else if (e.touches.length >= 2) {
-    if (one) { clearTimeout(one.timer); if (one.drag) input({ t: 'up', b: 0 }); one = null; }
+    if (one) { clearTimeout(one.timer); if (one.drag || one.held) { input({ t: 'up', b: 0 }); cur.classList.remove('press'); } one = null; }
     const a = pt(e.touches[0]), b = pt(e.touches[1]);
-    two = { d0: dist(a, b), m0: mid(a, b), lastM: mid(a, b), v0: { ...view }, mode: null, acc: 0 };
+    two = { d0: dist(a, b), m0: mid(a, b), lastM: mid(a, b), v0: { ...view }, mode: null, acc: 0, t0: Date.now() };
   }
 }, { passive: false });
 stage.addEventListener('touchmove', (e) => {
@@ -424,6 +484,11 @@ stage.addEventListener('touchmove', (e) => {
   }
   if (!one || e.touches.length !== 1) return;
   const p = pt(e.touches[0]);
+  if (one.tp) {
+    if (!one.moved && dist(p, one.start) > 6) { one.moved = true; if (!one.held) clearTimeout(one.timer); }
+    if (one.moved || one.held) tpMove(p.x - one.last.x, p.y - one.last.y);
+    one.last = p; return;
+  }
   if (!one.drag && !one.held && dist(p, one.start) > 10) {
     clearTimeout(one.timer); one.drag = true;
     const n = norm(one.start.x, one.start.y); if (n) { input({ t: 'move', ...n }); input({ t: 'down', b: 0 }); }
@@ -433,9 +498,20 @@ stage.addEventListener('touchmove', (e) => {
 }, { passive: false });
 stage.addEventListener('touchend', (e) => {
   e.preventDefault();
-  if (two) { if (e.touches.length === 0) two = null; return; }
+  if (two) {
+    if (e.touches.length === 0) {
+      if (tp.on && !two.mode && Date.now() - two.t0 < 350) tpClick(2);   // two-finger tap = right-click
+      two = null;
+    }
+    return;
+  }
   if (!one) return;
   clearTimeout(one.timer);
+  if (one.tp) {
+    if (one.held) { input({ t: 'up', b: 0 }); cur.classList.remove('press'); }
+    else if (!one.moved && Date.now() - one.t < 450) tpClick(0);
+    one = null; return;
+  }
   if (one.drag) input({ t: 'up', b: 0 });
   else if (!one.held && Date.now() - one.t < 550) {
     const n = norm(one.start.x, one.start.y);
@@ -443,7 +519,7 @@ stage.addEventListener('touchend', (e) => {
   }
   one = null;
 }, { passive: false });
-stage.addEventListener('touchcancel', () => { if (one?.drag) input({ t: 'up', b: 0 }); clearTimeout(one?.timer); one = two = null; });
+stage.addEventListener('touchcancel', () => { if (one?.drag || one?.held) { input({ t: 'up', b: 0 }); cur.classList.remove('press'); } clearTimeout(one?.timer); one = two = null; });
 window.addEventListener('resize', () => { clampView(); applyView(); });
 // a mouse (desktop browser, tablet with trackpad) also works
 stage.addEventListener('mousedown', (e) => { const n = norm(e.clientX, e.clientY); if (n) { input({ t: 'move', ...n }); input({ t: 'down', b: e.button }); } });
@@ -566,6 +642,31 @@ function addChat(text, mine) {
 $('chatBtn').onclick = () => { if (!inSession) return; unread = 0; $('chatDot').classList.remove('on'); sheet('chatSheet'); setTimeout(() => { $('chatLog').scrollTop = 1e9; }, 50); };
 $('chatClose').onclick = () => sheet(null);
 $('chatForm').onsubmit = (e) => { e.preventDefault(); const v = $('chatIn').value.trim(); if (!v) return; send({ t: 'chat', text: v }); addChat(v, true); $('chatIn').value = ''; };
+// ---------- trackpad switch & power actions ----------
+$('tpBtn').onclick = () => { setTp(!tp.on); toast(tp.on ? 'Trackpad: drag to move the pointer, tap to click, two-finger tap to right-click' : 'Touch: tap where you want to click', 2600); };
+let powerNote = '';
+const POWER = {
+  reboot: { ask: 'Restart {pc}?', note: 'The PC is restarting. Connect again in a minute or two.' },
+  sleep: { ask: 'Put {pc} to sleep?', note: 'The PC went to sleep. You can wake it with Wake-on-LAN from the desktop app.' },
+  signout: { ask: 'Sign out the user on {pc}?\n\nUnsaved work in their apps may be lost.', note: 'The user on the PC was signed out.' },
+  shutdown: { ask: 'Shut down {pc}?\n\nYou can’t reconnect until someone turns it on.', note: 'The PC is shutting down.' }
+};
+$('pwrBtn').onclick = () => { if (!canControl()) return toast('View only: your partner turned off control', 2000); sheet('pwrSheet'); };
+$('pwrClose').onclick = () => sheet(null);
+document.querySelectorAll('[data-pwr]').forEach(b => b.onclick = () => {
+  const what = b.dataset.pwr, p = POWER[what];
+  if (!canControl()) return toast('View only: your partner turned off control', 2000);
+  if (!confirm(p.ask.replace('{pc}', remoteName || 'the PC'))) return;
+  document.querySelectorAll('[data-pwr]').forEach(x => { x.disabled = true; });
+  send(what === 'reboot' ? { t: 'reboot' } : { t: 'power', what });
+  setTimeout(() => document.querySelectorAll('[data-pwr]').forEach(x => { x.disabled = false; }), 6000);
+});
+function onPowerReply(m) {
+  document.querySelectorAll('[data-pwr]').forEach(x => { x.disabled = false; });
+  if (m.error) { toast(m.error, 2600); return; }
+  powerNote = POWER[m.what]?.note || ''; sheet(null); toast(powerNote || 'Done', 3000);
+}
+
 // ---------- send files and text to the PC ----------
 // Same messages as the desktop app's file transfer and clipboard sync; the PC decides what it accepts.
 let sending = false;

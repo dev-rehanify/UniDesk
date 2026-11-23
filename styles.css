@@ -652,3 +652,20 @@ html.mac .aurora { background: var(--bg); }
 .allow-ids:focus { border-color: var(--a1); }
 .allow-wrap { padding: 0 14px 12px 50px; }
 .allow-wrap .hint2 { font-size: 11.5px; color: var(--mute); margin-top: 6px; }
+/* ===== responsive layout: bars and toolbars always fit the window ===== */
+/* The sharing bar and the session toolbar are centred with left: 50%, which on its own limits them to half
+   the window's width and squashes their text. Size them to their content instead, never wider than the window,
+   and let their buttons move to a second row only when the window really is too narrow. */
+.hosting { width: max-content; max-width: calc(100vw - 24px); flex-wrap: wrap; justify-content: center; row-gap: 6px; }
+.hosting > span, .pill-btn { white-space: nowrap; }
+.toolbar { width: max-content; max-width: calc(100vw - 24px); flex-wrap: wrap; justify-content: center; row-gap: 2px; }
+.tb, .tb-select { white-space: nowrap; flex: none; }
+.tb-id { min-width: 0; max-width: 300px; }
+#sessWho { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tb-select select { max-width: 130px; text-overflow: ellipsis; }
+@media (max-width: 1500px) { .tb > span:not(.badge):not(.rec-dot):not(#recTime) { display: none; } }   /* icon-only toolbar buttons below 1500 px */
+@media (max-width: 900px) {
+  .hosting { border-radius: 22px; padding: 8px 10px; gap: 8px; }
+  .hosting .pill-btn { padding: 6px 11px; }
+  .tb-id { max-width: 200px; }
+}

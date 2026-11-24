@@ -365,7 +365,7 @@ async function switchMonitor(i) {
 
 // ================= VIEWER =================
 function connect(idArg, isRetry) {
-  if (!isRetry) { reconnectTries = 0; inSession = false; }
+  if (!isRetry) { reconnectTries = 0; inSession = false; clearTimeout(reconnectTimer); }
   const id = String(idArg || $('remoteId').value).replace(/\D/g, '');
   if (id.length !== 9) return hint('Addresses are 9 digits.');
   if (id === myId) return hint('That’s your own address.');
@@ -598,8 +598,9 @@ window.dw.onFileSaved((p, into) => {
   toast('Saved: ' + p.split(/[\\/]/).pop(), 4500); window.dw.showFile(p);
 });
 window.dw.onFileFailed((n) => toast(`Couldn’t save ${n}`, 3000));
+let progressHideTimer = null;
 async function sendFiles(list, dir) {
-  const bar = $('progressBar'); $('progress').classList.add('show');
+  const bar = $('progressBar'); clearTimeout(progressHideTimer); $('progress').classList.add('show');
   for (const f of list) {
     const id = crypto.randomUUID(), CH = 48 * 1024;
     send({ t: 'file-start', id, name: f.name, size: f.size, ...(dir ? { dir } : {}) });
@@ -613,7 +614,7 @@ async function sendFiles(list, dir) {
     }
     send({ t: 'file-end', id }); toast(`Sent ${f.name}`); repN('filesOut'); repN('bytesOut', f.size); repEv(`You sent the file ${String(f.name).slice(0, 120)} (${fmtSize(f.size)})`);
   }
-  setTimeout(() => { $('progress').classList.remove('show'); bar.style.width = 0; }, 600);
+  clearTimeout(progressHideTimer); progressHideTimer = setTimeout(() => { $('progress').classList.remove('show'); bar.style.width = 0; }, 600);
 }
 
 // ---- chat ----
@@ -633,7 +634,7 @@ $('chatSend').onclick = sendChat;
 $('chatInput').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') sendChat(); if (e.key === 'Escape') toggleChat(false); });
 
 // ---- reconnect / idle / lock ----
-let inSession = false, byeReceived = false, reconnectTries = 0, hostHow = null, lastActivity = 0, idleTimer = null, limitWarned = false;
+let reconnectTimer = null, inSession = false, byeReceived = false, reconnectTries = 0, hostHow = null, lastActivity = 0, idleTimer = null, limitWarned = false;
 const MAX_RETRIES = 3;
 function onViewerDrop() {
   if (role !== 'viewer') return;
@@ -641,7 +642,7 @@ function onViewerDrop() {
     const id = viewerTarget; reconnectTries++;
     endAll({ silent: true });
     overlay('wait', `Reconnecting <span>${fmt(id)}</span>`, `Connection dropped · attempt ${reconnectTries} of ${MAX_RETRIES}`);
-    setTimeout(() => connect(id, true), 1200 * reconnectTries);
+    clearTimeout(reconnectTimer); reconnectTimer = setTimeout(() => connect(id, true), 1200 * reconnectTries);
     return;
   }
   const dropped = inSession && !byeReceived;
@@ -764,7 +765,12 @@ $('remoteId').addEventListener('keydown', (e) => { if (e.key === 'Enter') connec
 $('connectBtn').onclick = () => connect();
 const copyId = () => { if (!myId) return; navigator.clipboard.writeText(myId); toast('Address copied to clipboard', 1800); };
 $('myId').onclick = copyId; $('copyBtn').onclick = copyId;
-$('cancelBtn').onclick = () => { stopRestartWait(); clearTimeout(connectTimer); try { conn?.close(); } catch {} conn = null; role = null; overlay(null); };
+$('cancelBtn').onclick = () => {
+  stopRestartWait(); clearTimeout(connectTimer); clearTimeout(reconnectTimer);
+  const wasReconnecting = inSession;   // cancelled while reconnecting a dropped session: end that session for good
+  try { conn?.close(); } catch {} conn = null; role = null; overlay(null);
+  if (wasReconnecting) endAll({ quiet: true });
+};
 $('endBtn').onclick = () => endAll(); $('stopHost').onclick = () => { repWhy = 'You ended the session'; endAll(); };
 // In a tab the page can't use the browser's fullscreen (it never completes inside an embedded view),
 // so the main process makes the window fullscreen and lets this tab fill it.

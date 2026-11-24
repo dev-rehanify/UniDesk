@@ -122,6 +122,7 @@ button, input, select { font: inherit; color: inherit; }
 .overlay { position: fixed; inset: 46px 0 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   background: var(--scrim); backdrop-filter: blur(18px); opacity: 0; visibility: hidden; transition: .4s var(--ease); }
 .overlay.show { opacity: 1; visibility: visible; }
+.conn-live { display: contents; }
 .overlay h3 { margin: 26px 0 0; font-size: 20px; font-weight: 600; }
 .overlay h3 span { font-family: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace; background: var(--grad); -webkit-background-clip: text; color: transparent; }
 .overlay p { margin: 0 0 18px; color: var(--mute); }

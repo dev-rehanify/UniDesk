@@ -120,6 +120,7 @@ window.addEventListener('resize', moveInk);
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === ',') { e.preventDefault(); e.stopPropagation(); openSettings(); }
   else if (e.key === 'Escape' && $('settings').classList.contains('open') && !document.querySelector('.modal.show')) { e.stopPropagation(); closeSettings(); }
+  else if (e.key === 'Escape' && $('connecting').classList.contains('show') && !$('connecting').classList.contains('ok') && !document.querySelector('.modal.show')) { e.stopPropagation(); $('cancelBtn').click(); }
 }, true);
 $('resetSettings').onclick = () => { S = { ...DEFAULTS }; saveSettings(); applyAll(true); toast('Settings reset to defaults', 1800); };
 $('clearRecents').onclick = () => { try { localStorage.removeItem('dw-recent'); } catch {} loadRecents(); toast('Recent connections cleared', 1800); };
@@ -157,11 +158,22 @@ function renderId(id) {
     s.style.animationDelay = i * 45 + 'ms'; el.appendChild(s);
   });
 }
+// a failed call's message hides itself after a moment, unless a new call has started meanwhile
+let overlayHideTimer = null;
+const overlayHideLater = (ms) => { clearTimeout(overlayHideTimer); overlayHideTimer = setTimeout(() => overlay(null), ms); };
 function overlay(state, title, sub) {
+  clearTimeout(overlayHideTimer);
   const o = $('connecting'); o.classList.remove('ok', 'fail', 'auth');
   if (state !== 'auth') $('authBox').classList.remove('show');
-  if (!state) { o.classList.remove('show'); return; }
+  if (!state) {
+    const had = o.contains(document.activeElement); o.classList.remove('show');
+    if (had && $('home').classList.contains('active')) $('remoteId').focus({ preventScroll: true });
+    return;
+  }
   o.classList.add('show'); if (state !== 'wait') o.classList.add(state);
+  if (state === 'wait') setTimeout(() => {   // after the overlay has become visible, or the button can't take focus
+    if (o.classList.contains('show') && !o.contains(document.activeElement) && !document.querySelector('.modal.show') && !$('settings').classList.contains('open')) $('cancelBtn').focus({ preventScroll: true });
+  }, 60);
   if (title) $('connTitle').innerHTML = title;
   $('connSub').textContent = sub || '';
 }
@@ -414,7 +426,7 @@ function failConnect(title, sub) {
   if (role === 'viewer' && !call) { try { conn?.close(); } catch {} conn = null; role = null; }
   if (restartWait) { restartTick(); return; } // still waiting for a restarting PC: just try again later
   overlay('fail', title, sub);
-  setTimeout(() => overlay(null), 2000);
+  overlayHideLater(2000);
 }
 
 function onIncomingCall(c) {
@@ -1700,7 +1712,7 @@ function startRestartWait(id) {
 function restartTick() {
   const w = restartWait; if (!w) return;
   const now = Date.now();
-  if (now > w.until) { stopRestartWait(); overlay('fail', 'Still offline', 'The PC didn’t come back within 5 minutes.'); setTimeout(() => overlay(null), 2600); return; }
+  if (now > w.until) { stopRestartWait(); overlay('fail', 'Still offline', 'The PC didn’t come back within 5 minutes.'); overlayHideLater(2600); return; }
   if (role) return; // an attempt is in progress; its own overlay is showing
   const s = Math.round((now - w.since) / 1000);
   overlay('wait', `Restarting <span>${fmt(w.id)}</span>`, `Waiting for the PC to come back · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);

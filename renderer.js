@@ -142,9 +142,13 @@ let remotePerms = { control: true, files: true, clip: true };
 
 // ================= UI helpers =================
 function toast(msg, ms = 3200) {
-  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
-  $('toasts').appendChild(t);
-  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, ms);
+  const box = $('toasts'), drop = (x) => { clearTimeout(x._t); x.classList.add('out'); setTimeout(() => x.remove(), 300); };
+  let t = [...box.children].find(x => !x.classList.contains('out') && x.textContent === msg);
+  if (t) clearTimeout(t._t);   // same message again: keep the one already shown and restart its time
+  else { t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; box.appendChild(t); }
+  t._t = setTimeout(() => drop(t), ms);
+  const live = [...box.children].filter(x => !x.classList.contains('out'));
+  live.slice(0, Math.max(0, live.length - 4)).forEach(drop);   // at most 4 at once, so the stack stays on screen
 }
 const setStatus = (text, on) => { $('statusText').textContent = text; $('dot').classList.toggle('on', !!on); };
 function showView(name) {

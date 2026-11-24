@@ -104,7 +104,7 @@
       <div class="card-head"><svg class="ic"><use href="#i-screens"/></svg><h2>Remote desk</h2></div>
       <p class="sub">Enter your partner’s 9-digit address.</p>
       <div class="field">
-        <input id="remoteId" placeholder="000 000 000" maxlength="11" autofocus spellcheck="false" autocomplete="off">
+        <input id="remoteId" aria-label="Partner’s address" placeholder="000 000 000" maxlength="11" autofocus spellcheck="false" autocomplete="off">
         <button id="connectBtn" class="primary"><span>Connect</span><svg class="ic"><use href="#i-arrow"/></svg></button>
       </div>
       <div class="hint" id="connHint"></div>
@@ -134,7 +134,7 @@
     <div class="pw-field">
       <svg class="ic"><use href="#i-lock"/></svg>
       <input type="password" id="authPw" placeholder="Password or one-time code" autocomplete="off" spellcheck="false">
-      <button class="icon-btn" id="authEye" title="Show password"><svg class="ic"><use href="#i-eye"/></svg></button>
+      <button class="icon-btn" id="authEye" title="Show password" aria-label="Show password"><svg class="ic"><use href="#i-eye"/></svg></button>
     </div>
     <label class="check"><input type="checkbox" id="authRemember"><span></span>Remember on this computer (encrypted)</label>
     <div class="auth-err" id="authErr"></div>
@@ -208,7 +208,7 @@
 <aside id="chat" class="chat">
   <div class="chat-head"><svg class="ic"><use href="#i-chat"/></svg>Chat<button class="icon-btn" id="chatClose" title="Close chat" aria-label="Close chat"><svg class="ic"><use href="#i-x"/></svg></button></div>
   <div id="chatLog" class="chat-log"><div class="chat-empty">Messages are sent peer-to-peer.</div></div>
-  <div class="chat-input"><input id="chatInput" placeholder="Type a message…"><button class="icon-btn accent" id="chatSend" title="Send" aria-label="Send message"><svg class="ic"><use href="#i-send"/></svg></button></div>
+  <div class="chat-input"><input id="chatInput" aria-label="Chat message" placeholder="Type a message…"><button class="icon-btn accent" id="chatSend" title="Send" aria-label="Send message"><svg class="ic"><use href="#i-send"/></svg></button></div>
 </aside>
 
 <!-- ============ SETTINGS ============ -->
@@ -304,7 +304,7 @@
             <label class="switch"><input type="checkbox" checked disabled><i></i></label></div>
           <div class="row"><svg class="ic"><use href="#i-users"/></svg><div class="txt"><b>Only allow approved desks</b><span>Everyone else is turned away before you’re even asked</span></div>
             <label class="switch"><input type="checkbox" data-set="allowOnly"><i></i></label></div>
-          <div class="allow-wrap" id="allowWrap"><textarea id="allowIds" class="allow-ids" spellcheck="false" placeholder="123 456 789&#10;987 654 321"></textarea>
+          <div class="allow-wrap" id="allowWrap"><textarea id="allowIds" aria-label="Allowed addresses, one per line" class="allow-ids" spellcheck="false" placeholder="123 456 789&#10;987 654 321"></textarea>
             <div class="hint2">One address per line (spaces are fine). Add the desks you trust, like your own laptop.</div></div>
           <div class="row"><svg class="ic"><use href="#i-mouse"/></svg><div class="txt"><b>Allow remote control</b><span>Off = visitors can only watch</span></div>
             <label class="switch"><input type="checkbox" data-set="allowControl"><i></i></label></div>
@@ -375,7 +375,7 @@
         <div class="st-label">Connection server (signaling)</div>
         <div class="st-card">
           <div class="row"><svg class="ic"><use href="#i-globe"/></svg><div class="txt"><b>Server</b><span id="netState">Default public server</span></div></div>
-          <div class="row form-row"><input id="netHost" placeholder="Host, e.g. peer.example.com (empty = default)" spellcheck="false"><input id="netPort" placeholder="Port" class="w-s"><input id="netPath" placeholder="/path" class="w-s"></div>
+          <div class="row form-row"><input id="netHost" aria-label="Server host" placeholder="Host, e.g. peer.example.com (empty = default)" spellcheck="false"><input id="netPort" aria-label="Server port" placeholder="Port" class="w-s"><input id="netPath" aria-label="Server path" placeholder="/path" class="w-s"></div>
           <div class="row"><svg class="ic"><use href="#i-lock"/></svg><div class="txt"><b>Use TLS (wss://)</b><span>Keep on for servers on the internet</span></div><label class="switch"><input type="checkbox" id="netSecure" checked><i></i></label></div>
         </div>
       </div>
@@ -383,7 +383,7 @@
         <div class="st-label">Relay (TURN): for strict office &amp; mobile networks</div>
         <div class="st-card">
           <div class="row"><svg class="ic"><use href="#i-tray"/></svg><div class="txt"><b>Relay</b><span id="turnState">No relay</span></div></div>
-          <div class="row form-row"><input id="turnUrls" placeholder="turn:turn.example.com:3478, turns:turn.example.com:5349" spellcheck="false"></div>
+          <div class="row form-row"><input id="turnUrls" aria-label="Relay server addresses" placeholder="turn:turn.example.com:3478, turns:turn.example.com:5349" spellcheck="false"></div>
           <div class="row form-row"><input id="turnUser" placeholder="Username" spellcheck="false"><input id="turnPass" type="password" placeholder="Password (stored encrypted)"></div>
           <div class="row ua-info"><svg class="ic sm"><use href="#i-shield"/></svg><div class="txt"><span>Media stays end-to-end encrypted even through a relay. Both people should use the same server settings. Run your own with <span class="mono">npx peerjs --port 9000</span> and coturn.</span></div></div>
         </div>
@@ -412,10 +412,10 @@
 </aside>
 
 <!-- ============ PASSWORD DIALOG ============ -->
-<div class="modal" id="pwDialog">
+<div class="modal" id="pwDialog" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
   <div class="modal-card">
     <div class="modal-icon"><svg class="ic"><use href="#i-lock"/></svg></div>
-    <h3>Unattended access password</h3>
+    <h3 id="pwTitle">Unattended access password</h3>
     <p>Anyone with this password can control this computer while UniDesk is running. Use something long and unique.</p>
     <input type="password" id="pw1" placeholder="New password (8+ characters)" autocomplete="new-password">
     <div class="meter" id="pwMeter" data-s="-1"><i></i><i></i><i></i><i></i></div>
@@ -426,21 +426,22 @@
   </div>
 </div>
 
-<!-- ============ RENAME DIALOG ============ -->
-<div class="modal" id="repDialog">
+<!-- ============ SESSION REPORT ============ -->
+<div class="modal" id="repDialog" role="dialog" aria-modal="true" aria-labelledby="repTitle">
   <div class="modal-card rep-card" tabindex="-1">
     <div class="modal-icon"><svg class="ic"><use href="#i-clock"/></svg></div>
-    <h3>Session report</h3>
+    <h3 id="repTitle">Session report</h3>
     <p id="repSub"></p>
     <div class="rep-facts" id="repFacts"></div>
     <ol class="rep-list" id="repList"></ol>
     <div class="modal-actions"><button class="ghost-btn" id="repCopy">Copy as text</button><button class="primary" id="repClose"><span>Close</span></button></div>
   </div>
 </div>
-<div class="modal" id="nameDialog">
+<!-- ============ RENAME DIALOG ============ -->
+<div class="modal" id="nameDialog" role="dialog" aria-modal="true" aria-labelledby="nameTitle">
   <div class="modal-card">
     <div class="modal-icon"><svg class="ic"><use href="#i-screen"/></svg></div>
-    <h3>Name this desk</h3>
+    <h3 id="nameTitle">Name this desk</h3>
     <p>Give it a name you’ll recognise, like “Mum’s laptop” or “Office&nbsp;PC”.</p>
     <input id="nameInput" maxlength="40" placeholder="Desk name" spellcheck="false">
     <textarea id="noteInput" maxlength="300" rows="3" placeholder="Notes (optional): who uses it, where it is, what to check"></textarea>

@@ -119,7 +119,7 @@ $('settingsClose').onclick = closeSettings; $('settingsScrim').onclick = closeSe
 window.addEventListener('resize', moveInk);
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === ',') { e.preventDefault(); e.stopPropagation(); openSettings(); }
-  else if (e.key === 'Escape' && $('settings').classList.contains('open')) { e.stopPropagation(); closeSettings(); }
+  else if (e.key === 'Escape' && $('settings').classList.contains('open') && !document.querySelector('.modal.show')) { e.stopPropagation(); closeSettings(); }
 }, true);
 $('resetSettings').onclick = () => { S = { ...DEFAULTS }; saveSettings(); applyAll(true); toast('Settings reset to defaults', 1800); };
 $('clearRecents').onclick = () => { try { localStorage.removeItem('dw-recent'); } catch {} loadRecents(); toast('Recent connections cleared', 1800); };
@@ -360,7 +360,7 @@ function connect(idArg, isRetry) {
   if (role) return;
   $('connHint').textContent = '';
   role = 'viewer'; viewerTarget = id; authTriedSaved = false; pendingPw = null; authCh = null;
-  $('authPw').value = ''; $('authPw').type = 'password'; $('authEye').classList.remove('on'); $('authRemember').checked = false;
+  $('authPw').value = ''; $('authPw').type = 'password'; $('authEye').classList.remove('on'); $('authEye').title = 'Show password'; $('authEye').setAttribute('aria-label', 'Show password'); $('authRemember').checked = false;
   $('authGo').disabled = false; $('authGo').querySelector('span').textContent = 'Unlock'; $('authErr').textContent = '';
   const nearby = nearbyDesk(id);
   if (!isRetry) overlay('wait', `Calling <span>${fmt(id)}</span>`, nearby ? 'Connecting over your local network…' : 'Connecting…');
@@ -407,7 +407,7 @@ async function submitAuth(pw, remember, fromSaved) {
 $('authGo').onclick = () => submitAuth($('authPw').value, $('authRemember').checked, false);
 $('authPw').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') $('authGo').click(); });
 $('authAsk').onclick = () => { send({ t: 'ask' }); $('authBox').classList.remove('show'); overlay('wait', `Calling <span>${fmt(viewerTarget)}</span>`, 'Waiting for your partner to accept…'); };
-$('authEye').onclick = () => { const p = $('authPw'); p.type = p.type === 'password' ? 'text' : 'password'; $('authEye').classList.toggle('on', p.type === 'text'); };
+$('authEye').onclick = () => { const p = $('authPw'); p.type = p.type === 'password' ? 'text' : 'password'; const shown = p.type === 'text'; $('authEye').classList.toggle('on', shown); $('authEye').title = shown ? 'Hide password' : 'Show password'; $('authEye').setAttribute('aria-label', $('authEye').title); };
 
 function failConnect(title, sub) {
   clearTimeout(connectTimer);
@@ -984,8 +984,30 @@ function openReport(e) {
 }
 $('repClose').onclick = () => { $('repDialog').classList.remove('show'); repOpen = null; };
 $('repCopy').onclick = () => { if (!repOpen) return; window.dw.clipWrite(reportText(repOpen)); toast('Report copied as text', 1600); };
-$('repDialog').addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('repClose').click(); });
 $('repDialog').addEventListener('click', (ev) => { if (ev.target === $('repDialog')) $('repClose').click(); });
+// Dialogs: Escape closes from anywhere inside, Tab stays inside, and focus goes back where it was
+const MODALS = { pwDialog: () => closePwDialog(), nameDialog: () => closeNameDialog(), repDialog: () => $('repClose').click() };
+const modalOpener = {};
+const modalFocusables = (m) => [...m.querySelectorAll('button, input, textarea, select, [tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled && x.offsetParent !== null);
+for (const id of Object.keys(MODALS)) new MutationObserver(() => {
+  const m = $(id), open = m.classList.contains('show');
+  if (open && !(id in modalOpener)) {
+    modalOpener[id] = document.activeElement;
+    setTimeout(() => { if (m.classList.contains('show') && !m.contains(document.activeElement)) (m.querySelector('input, textarea') || m.querySelector('.primary'))?.focus(); }, 200);
+  } else if (!open && id in modalOpener) {
+    const o = modalOpener[id]; delete modalOpener[id];
+    if (o && o !== document.body && o.isConnected && (document.activeElement === document.body || m.contains(document.activeElement))) o.focus({ preventScroll: true });
+  }
+}).observe($(id), { attributes: true, attributeFilter: ['class'] });
+document.addEventListener('keydown', (e) => {
+  const id = Object.keys(MODALS).find(k => $(k).classList.contains('show')); if (!id) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); MODALS[id](); return; }
+  if (e.key !== 'Tab') return;
+  const f = modalFocusables($(id)); if (!f.length) return;
+  const i = f.indexOf(document.activeElement);
+  if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+  else if (!e.shiftKey && (i === -1 || i === f.length - 1)) { e.preventDefault(); f[0].focus(); }
+}, true);
 $('clearHistory').onclick = () => { try { localStorage.removeItem('ud-history'); } catch {} renderHistory(); toast('History cleared', 1500); };
 renderHistory();
 

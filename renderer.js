@@ -234,6 +234,7 @@ async function onIncomingConn(c) {
     const who = fmt(basePeer(c.peer));
     let asked = false, settled = false;
     let vname = '';
+    c.on('close', () => { if (asked && !settled && reqResolve) { toast(`${who} cancelled the request`, 3000); answerRequest(null); } });   // visitor gave up while being asked
     const finish = (ok, how, perms) => {
       if (settled) return; settled = true; c.off('data', pre); pendingHost = null; closeRequest();
       if (ok) acceptHost(c, who, how, perms);

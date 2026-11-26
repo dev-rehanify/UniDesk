@@ -336,6 +336,8 @@ ipcMain.handle('admin-relaunch', () => {
 
 // ---------- Draw-on-screen overlay (host side) ----------
 let overlayWin = null;
+// Windows 10 2004+ can leave a window out of screen capture entirely (older versions would capture it as a black box)
+const DRAW_HIDDEN = process.platform === 'win32' && (+os0.release().split('.')[2] || 0) >= 19041;
 function ensureOverlay() {
   if (overlayWin && !overlayWin.isDestroyed()) return overlayWin;
   const b = activeDisplay ? eScreen.getAllDisplays().find(d => { const p = physBounds(d); return p.x === activeDisplay.x && p.y === activeDisplay.y; }) || eScreen.getPrimaryDisplay() : eScreen.getPrimaryDisplay();
@@ -348,7 +350,11 @@ function ensureOverlay() {
   overlayWin.setIgnoreMouseEvents(true);
   overlayWin.setVisibleOnAllWorkspaces?.(true, { visibleOnFullScreen: true });
   overlayWin.loadFile('overlay.html');
-  overlayWin.once('ready-to-show', () => overlayWin.showInactive());
+  overlayWin.once('ready-to-show', () => {
+    overlayWin.showInactive();
+    // keep the drawing out of the shared picture (the visitor already sees their own strokes); Windows only applies this once the window is shown
+    if (DRAW_HIDDEN) overlayWin.setContentProtection(true);
+  });
   return overlayWin;
 }
 ipcMain.on('draw', (_e, m) => { const o = ensureOverlay(); if (o.webContents.isLoading()) o.webContents.once('did-finish-load', () => o.webContents.send('draw', m)); else o.webContents.send('draw', m); });
@@ -751,7 +757,8 @@ ipcMain.handle('sysinfo', () => {
     os: os.platform() === 'win32' ? `Windows ${build >= 22000 ? 11 : 10}` : IS_MAC ? `macOS ${process.getSystemVersion()}` : `Linux ${rel}`,
     ram: Math.round(os.totalmem() / 1073741824) + ' GB',
     cpu: (os.cpus()[0]?.model || '').replace(/\s+/g, ' ').trim(),
-    cores: os.cpus().length
+    cores: os.cpus().length,
+    drawHidden: DRAW_HIDDEN
   };
 });
 // Detailed, live PC info for the visitor's info panel
@@ -951,6 +958,7 @@ ipcMain.on('active-display', (_e, displayId) => {
   const all = eScreen.getAllDisplays();
   const d = all.find(x => String(x.id) === String(displayId)) || eScreen.getPrimaryDisplay();
   activeDisplay = physBounds(d);
+  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.setBounds(d.bounds);   // drawings follow the screen being shared
 });
 
 // ---------- Clipboard ----------

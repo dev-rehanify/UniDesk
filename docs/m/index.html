@@ -289,8 +289,8 @@ function connectTo(raw) {
 function deviceName() { const ua = navigator.userAgent; return (/iPad/.test(ua) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android phone' : 'Phone') + ' (UniDesk Mobile)'; }
 function fail(msg) {
   clearTimeout(connectTimer);
-  try { call?.close(); } catch {} try { conn?.close(); } catch {}
-  call = conn = null; target = null; inSession = false;
+  try { call?.close(); } catch {} try { conn?.close(); } catch {} try { voice?.close(); } catch {}
+  call = conn = voice = null; voiceEl.srcObject = null; target = null; inSession = false;
   $('inbox').innerHTML = ''; incoming.clear(); ciParts.clear(); pcClip = '';
   $('chatLog').innerHTML = '<div class="chat-empty">Messages with the person at the PC appear here.</div>'; unread = 0; $('chatDot').classList.remove('on');
   sheet(null); show('home'); $('hint').textContent = msg;
@@ -367,8 +367,15 @@ function wire(c) {
     }
   });
 }
+let voice = null; const voiceEl = document.createElement('audio'); voiceEl.autoplay = true; document.body.appendChild(voiceEl);
 function onCall(c) {
   if (!conn || c.peer !== conn.peer) { c.close(); return; }
+  if (c.metadata?.kind === 'voice') {   // the person at the PC pressed Talk: play their voice, keep the screen call as it is
+    try { voice?.close(); } catch {} voice = c; c.answer();
+    c.on('stream', (s) => { voiceEl.srcObject = s; voiceEl.play().catch(() => {}); });
+    c.on('close', () => { if (voice === c) { voice = null; voiceEl.srcObject = null; } });
+    toast('The person at the PC is talking', 2000); return;
+  }
   call = c; clearTimeout(connectTimer);
   c.answer();
   c.on('stream', (s) => {

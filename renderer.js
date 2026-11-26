@@ -123,7 +123,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape' && $('connecting').classList.contains('show') && !$('connecting').classList.contains('ok') && !document.querySelector('.modal.show')) { e.stopPropagation(); $('cancelBtn').click(); }
 }, true);
 $('resetSettings').onclick = () => { S = { ...DEFAULTS }; saveSettings(); applyAll(true); toast('Settings reset to defaults', 1800); };
-$('clearRecents').onclick = () => { try { localStorage.removeItem('dw-recent'); } catch {} loadRecents(); toast('Recent connections cleared', 1800); };
+$('clearRecents').onclick = () => { try { localStorage.removeItem('dw-recent'); } catch {} writeDesks(readDesks().filter(d => d.fav)); toast('Recent connections cleared (pinned desks kept)', 1800); };
 $('newIdBtn').onclick = () => {
   if (role) return toast('End the current session first', 2000);
   if (!confirm('Get a new address? People who saved your old one will no longer be able to reach you.')) return;
@@ -193,7 +193,7 @@ function loadPeer() {
 }
 function storedId() {
   let id = null; try { id = localStorage.getItem('dw-id'); } catch {}
-  if (!id) { id = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000000 + 100000000); try { localStorage.setItem('dw-id', id); } catch {} }
+  if (!/^\d{9}$/.test(id || '')) { id = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000000 + 100000000); try { localStorage.setItem('dw-id', id); } catch {} }   // a missing or damaged address gets a fresh one
   return id;
 }
 
@@ -215,7 +215,7 @@ async function boot() {
       }
       location.reload(); return;
     }
-    if (e.type === 'peer-unavailable') { failConnect('Desk not found', 'That ID is offline or does not exist.'); return; }
+    if (e.type === 'peer-unavailable') { failConnect('Desk not found', 'That address is offline or doesn’t exist. Check the 9 digits and try again.', true); return; }
     console.error(e); setStatus('Network: ' + e.type);
   });
   peer.on('connection', onIncomingConn);
@@ -241,6 +241,7 @@ async function onIncomingConn(c) {
     c.on('close', () => { if (asked && !settled && reqResolve) { toast(`${who} cancelled the request`, 3000); answerRequest(null); } });   // visitor gave up while being asked
     const finish = (ok, how, perms) => {
       if (settled) return; settled = true; c.off('data', pre); pendingHost = null; closeRequest();
+      if (ok && !c.open) return;   // the visitor left while being checked
       if (ok) acceptHost(c, who, how, perms);
       else { c.send({ t: 'denied' }); setTimeout(() => c.close(), 300); logHistory({ dir: 'in', id: who, how: 'declined' }); }
     };
@@ -275,8 +276,11 @@ async function onIncomingConn(c) {
 
 async function acceptHost(c, who, how, perms) {
     role = 'host'; conn = c; hostHow = how; P = perms || defaultPerms();
+    $('chatLog').innerHTML = '<div class="chat-empty">Messages are sent peer-to-peer.</div>'; $('chatBadge').classList.remove('show');   // a new session starts with an empty chat
+    c.on('close', () => { if (conn === c) endAll(); });   // wired first: the visitor may leave while the session is still starting
     if (IS_MAC) {
       const p = await window.dw.macPerms(true);
+      if (conn !== c) return;
       if (!p.screen) { toast('Allow Screen Recording for UniDesk in System Settings, then reconnect', 6000); window.dw.openMacPref('screen'); }
       else if (!p.control) toast('Allow Accessibility for UniDesk so the visitor can control this Mac', 6000);
     }
@@ -285,10 +289,14 @@ async function acceptHost(c, who, how, perms) {
     }
     logHistory({ dir: 'in', id: who, how }); repStart(who, how);
     if (S.hideWall && !IS_MAC) { await window.dw.wallpaperHide().catch(() => {}); await new Promise(r => setTimeout(r, 250)); }   // Windows, and GNOME/Cinnamon/MATE on Linux
+    if (conn !== c) { if (S.hideWall && !IS_MAC) window.dw.wallpaperRestore(); return; }
     try {
       screens = await window.dw.screens(false);
+      if (conn !== c) return;
       curScreen = Math.max(0, screens.findIndex(s => s.primary));
-      stream = await capture(screens[curScreen], S.audio);
+      const s = await capture(screens[curScreen], S.audio);
+      if (conn !== c) { s.getTracks().forEach(t => t.stop()); return; }   // the visitor left while capture was starting
+      stream = s;
       call = (c.provider || peer).call(c.peer, stream, { sdpTransform: preferCodecSdp }); // same server the visitor came in on (internet or LAN)
       tune(call.peerConnection, 'balanced');
       wireData(c); startClipSync(); sendScreens(); sendPerms(); startIdleWatch();
@@ -297,7 +305,7 @@ async function acceptHost(c, who, how, perms) {
       if (!IS_MAC) window.dw.secureStart().catch(() => {}); // stream lock screen / UAC if the service is installed
       window.dw.sysinfo().then(info => send({ t: 'info', ...info }));
       $('hostWho').textContent = who; $('hosting').classList.add('show');
-      c.on('close', endAll); call.on('close', endAll);
+      call.on('close', endAll);
     } catch (e) { console.error(e); toast('Screen capture failed: ' + e.message); endAll(); }
 }
 
@@ -357,6 +365,7 @@ function tune(pc, mode) {
 async function switchMonitor(i) {
   if (!screens[i] || !call) return;
   const ns = await capture(screens[i], false);
+  if (!call || !stream) { ns.getTracks().forEach(t => t.stop()); return; }   // the session ended meanwhile
   const track = ns.getVideoTracks()[0];
   const sender = call.peerConnection.getSenders().find(s => s.track?.kind === 'video');
   await sender.replaceTrack(track);
@@ -371,6 +380,7 @@ async function switchMonitor(i) {
 // ================= VIEWER =================
 function connect(idArg, isRetry) {
   if (!isRetry) { reconnectTries = 0; inSession = false; clearTimeout(reconnectTimer); }
+  if (!isRetry && !role) { $('chatLog').innerHTML = '<div class="chat-empty">Messages are sent peer-to-peer.</div>'; $('chatBadge').classList.remove('show'); }   // a new session starts with an empty chat
   const id = String(idArg || $('remoteId').value).replace(/\D/g, '');
   if (id.length !== 9) return hint('Addresses are 9 digits.');
   if (id === myId) return hint('That’s your own address.');
@@ -389,20 +399,23 @@ async function startConn(id, nearby) {
   if (role !== 'viewer' || viewerTarget !== id) return; // cancelled meanwhile
   viaLan = !!via;
   conn = (via || peer).connect(PREFIX + id, { reliable: true, serialization: 'json' });
+  if (!conn) return failConnect('Offline', 'This PC isn’t connected to the network right now. Try again in a moment.', true);   // the peer is offline or reconnecting
   conn.on('open', () => { wireData(conn); saveRecent(id); window.dw.sysinfo().then(i => send({ t: 'vinfo', name: i.host })).catch(() => {}); });
   const myConn = conn;
   conn.on('close', () => conn === myConn && onViewerDrop());
   conn.on('error', () => conn === myConn && onViewerDrop());
-  clearTimeout(connectTimer);
-  connectTimer = setTimeout(() => { if (!call) failConnect('No answer', 'Your partner did not respond in time.'); }, 60000);
+  armConnectTimer();
 }
+function armConnectTimer() { clearTimeout(connectTimer); connectTimer = setTimeout(() => { if (!call) failConnect('No answer', 'Your partner did not respond in time.', true); }, 60000); }
 // ---- unattended access (viewer) ----
 let viewerTarget = null, authCh = null, authTriedSaved = false, pendingPw = null;
 async function onAuth(m) {
+  clearTimeout(connectTimer);   // now waiting for the user to type, not for the partner
   authCh = m;
   if (!authTriedSaved) {
     authTriedSaved = true;
     const pw = await window.dw.pwGet(viewerTarget);
+    if (role !== 'viewer') return;   // cancelled meanwhile
     if (pw) { overlay('wait', `Unlocking <span>${fmt(viewerTarget)}</span>`, 'Using your saved password…'); return submitAuth(pw, false, true); }
   }
   showAuth('');
@@ -423,13 +436,23 @@ async function submitAuth(pw, remember, fromSaved) {
 }
 $('authGo').onclick = () => submitAuth($('authPw').value, $('authRemember').checked, false);
 $('authPw').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') $('authGo').click(); });
-$('authAsk').onclick = () => { send({ t: 'ask' }); $('authBox').classList.remove('show'); overlay('wait', `Calling <span>${fmt(viewerTarget)}</span>`, 'Waiting for your partner to accept…'); };
+$('authAsk').onclick = () => { send({ t: 'ask' }); armConnectTimer(); $('authBox').classList.remove('show'); overlay('wait', `Calling <span>${fmt(viewerTarget)}</span>`, 'Waiting for your partner to accept…'); };
 $('authEye').onclick = () => { const p = $('authPw'); p.type = p.type === 'password' ? 'text' : 'password'; const shown = p.type === 'text'; $('authEye').classList.toggle('on', shown); $('authEye').title = shown ? 'Hide password' : 'Show password'; $('authEye').setAttribute('aria-label', $('authEye').title); };
 
-function failConnect(title, sub) {
+function failConnect(title, sub, canRetry) {
   clearTimeout(connectTimer);
+  const reconnecting = role === 'viewer' && !call && inSession;   // an automatic reconnect attempt failed
   if (role === 'viewer' && !call) { try { conn?.close(); } catch {} conn = null; role = null; }
   if (restartWait) { restartTick(); return; } // still waiting for a restarting PC: just try again later
+  if (reconnecting) {
+    if (canRetry && reconnectTries < MAX_RETRIES) {
+      const id = viewerTarget; reconnectTries++;
+      overlay('wait', `Reconnecting <span>${fmt(id)}</span>`, `Connection dropped · attempt ${reconnectTries} of ${MAX_RETRIES}`);
+      clearTimeout(reconnectTimer); reconnectTimer = setTimeout(() => connect(id, true), 1200 * reconnectTries);
+      return;
+    }
+    endAll();   // giving up: end the old session properly (timer, state)
+  }
   overlay('fail', title, sub);
   overlayHideLater(2000);
 }
@@ -441,6 +464,7 @@ function onIncomingCall(c) {
   c.answer(undefined, { sdpTransform: preferCodecSdp });
   c.on('stream', (s) => {
     const v = $('video'); v.srcObject = s; v.muted = false;
+    if (c._started) return; c._started = true;   // 'stream' fires once per track (video, and audio when shared): set up once
     if (restartWait) restartBack = Date.now(); // 'stream' fires once per track, so remember it briefly
     const afterRestart = Date.now() - restartBack < 5000;
     overlay('ok', reconnectTries || afterRestart ? 'Reconnected' : 'Connected', afterRestart ? 'The PC is back after its restart' : 'Starting session…');
@@ -450,6 +474,7 @@ function onIncomingCall(c) {
     logHistory({ dir: 'out', id: fmt(viewerTarget), how: pendingPw ? 'unattended' : 'approved' }); pendingPw = null;
     $('quality').value = S.quality; send({ t: 'quality', q: S.quality }); $('clipSync').checked = !!S.clip;
     setTimeout(() => {
+      if (call !== c) return;   // the session ended meanwhile
       overlay(null); showView('session'); v.classList.add('playing'); $('stage').focus(); revealToolbar();
       if (S.autoFull && !isFull()) setFull(true);
     }, 650);
@@ -467,7 +492,8 @@ function wireData(c) {
     // reassemble messages that send() split into pieces (the data channel drops messages of 16 KB or more)
     let m = raw;
     if (raw && raw.t === '_c') {
-      let e = parts.get(raw.id); if (!e) { e = { s: new Array(raw.n), got: 0 }; parts.set(raw.id, e); }
+      if (!(Number.isInteger(raw.n) && raw.n > 0 && raw.n <= 2000 && Number.isInteger(raw.i) && raw.i >= 0 && raw.i < raw.n)) return;   // malformed piece
+      let e = parts.get(raw.id); if (!e) { if (parts.size >= 64) parts.clear(); e = { s: new Array(raw.n), got: 0 }; parts.set(raw.id, e); }
       if (e.s[raw.i] === undefined) { e.s[raw.i] = raw.s; e.got++; }
       if (e.got < raw.n) return;
       parts.delete(raw.id);
@@ -491,7 +517,7 @@ function wireData(c) {
         $('deskInfo').textContent = `${m.host} · ${m.os} · ${m.ram} RAM · ${m.cores} cores`;
         $('sessWho').textContent = `${m.host} · ${fmt(viewerTarget)}`;
         nameDeskIfUnnamed(viewerTarget, m.host); break;
-      case 'denied': failConnect('Declined', 'Your partner declined the request.'); break;
+      case 'denied': failConnect('Declined', 'Your partner declined or didn’t answer in time.'); break;
       case 'blocked': if (role === 'viewer' && !call) { stopRestartWait(); failConnect('Not allowed', 'That desk only accepts connections from approved addresses.'); } break;
       case 'ps': if (role === 'host') onPsRequest(m); break;
       case 'ps-r': if (role === 'viewer') onFsReply(m); break;
@@ -513,7 +539,7 @@ function wireData(c) {
       case 'screens': remoteScreens = m.list; curScreen = m.cur; renderScreens(); break;
       case 'screen': curScreen = m.i; renderScreens(); setTimeout(() => $('video').classList.remove('switching'), 250); toast(`Now viewing Screen ${m.i + 1}`, 1600); break;
       case 'thumbs': if (role === 'host') sendScreens(); break;
-      case 'clip': if (role === 'host' && !P.clip) break; repN('clipIn'); lastClip = m.text; window.dw.clipWrite(m.text); if (role === 'viewer') addClipHist(m.text); break;
+      case 'clip': if (role === 'host' ? !P.clip : !$('clipSync').checked) break; repN('clipIn'); lastClip = m.text; window.dw.clipWrite(m.text); if (role === 'viewer') addClipHist(m.text); break;
       case 'chat': addChat(m.text, false); repN('chatIn'); break;
       case 'perms': {
         const was = remotePerms; remotePerms = m;
@@ -563,9 +589,10 @@ function renderScreens() {
   remoteScreens.forEach((s, i) => {
     const b = document.createElement('button');
     b.className = 'scr' + (i === curScreen ? ' active' : ''); b.style.animationDelay = i * 50 + 'ms';
-    b.innerHTML = `<div class="th"${s.thumb ? ` style="background-image:url('${s.thumb}')"` : ''}>${s.thumb ? '' : '<svg class="ic xl"><use href="#i-screen"/></svg>'}</div>
+    const th = /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(s.thumb || '') ? s.thumb : '';   // only accept a real image from the other side
+    b.innerHTML = `<div class="th"${th ? ` style="background-image:url('${th}')"` : ''}>${th ? '' : '<svg class="ic xl"><use href="#i-screen"/></svg>'}</div>
       ${s.primary ? '<span class="tag">Primary</span>' : ''}
-      <div class="meta"><span class="num">${i + 1}</span>Screen ${i + 1}<span class="res">${s.res || ''}</span></div>`;
+      <div class="meta"><span class="num">${i + 1}</span>Screen ${i + 1}<span class="res">${esc(s.res)}</span></div>`;
     b.onclick = () => selectScreen(i);
     grid.appendChild(b);
   });
@@ -575,7 +602,11 @@ function selectScreen(i) {
   $('video').classList.add('switching');
   send({ t: 'monitor', i }); closePanel();
 }
-function openPanel() { send({ t: 'thumbs' }); $('screensPanel').classList.add('open'); $('screensBtn').classList.add('on'); }
+function openPanel() {
+  // open just above the toolbar, which can take two rows in a narrow window
+  const sb = $('session').getBoundingClientRect().bottom, tt = $('toolbar').getBoundingClientRect().top;
+  $('screensPanel').style.bottom = Math.max(64, sb - tt + 10) + 'px'; $('screensPanel').style.maxHeight = `calc(100% - ${Math.max(64, sb - tt + 10) + 16}px)`;
+  send({ t: 'thumbs' }); $('screensPanel').classList.add('open'); $('screensBtn').classList.add('on'); }
 function closePanel() { $('screensPanel').classList.remove('open'); $('screensBtn').classList.remove('on'); $('stage').focus(); }
 $('screensBtn').onclick = (e) => { e.stopPropagation(); $('screensPanel').classList.contains('open') ? closePanel() : openPanel(); };
 $('stage').addEventListener('pointerdown', () => $('screensPanel').classList.contains('open') && closePanel());
@@ -605,19 +636,22 @@ window.dw.onFileSaved((p, into) => {
 window.dw.onFileFailed((n) => toast(`Couldn’t save ${n}`, 3000));
 let progressHideTimer = null;
 async function sendFiles(list, dir) {
+  if (role === 'viewer' && remotePerms.files === false) return toast('Your partner doesn’t allow file transfer', 2400);
   const bar = $('progressBar'); clearTimeout(progressHideTimer); $('progress').classList.add('show');
   for (const f of list) {
+    if (!conn?.open) { toast('Connection lost: file not sent', 2600); break; }
     const id = crypto.randomUUID(), CH = 48 * 1024;
     send({ t: 'file-start', id, name: f.name, size: f.size, ...(dir ? { dir } : {}) });
     const buf = new Uint8Array(await f.arrayBuffer());
     for (let o = 0; o < buf.length; o += CH) {
       let bin = ''; const part = buf.subarray(o, o + CH);
       for (let i = 0; i < part.length; i += 8192) bin += String.fromCharCode.apply(null, part.subarray(i, i + 8192));
-      send({ t: 'file-chunk', id, b64: btoa(bin) });
+      if (!send({ t: 'file-chunk', id, b64: btoa(bin) })) break;   // the session ended
       const dc = conn?.dataChannel; while (dc && dc.bufferedAmount > 4 * 1024 * 1024) await new Promise(r => setTimeout(r, 20));
       bar.style.width = ((o + part.length) / buf.length * 100) + '%';
     }
-    send({ t: 'file-end', id }); toast(`Sent ${f.name}`); repN('filesOut'); repN('bytesOut', f.size); repEv(`You sent the file ${String(f.name).slice(0, 120)} (${fmtSize(f.size)})`);
+    if (!send({ t: 'file-end', id })) { toast(`Connection lost: ${f.name} not sent`, 2600); break; }
+    toast(`Sent ${f.name}`); repN('filesOut'); repN('bytesOut', f.size); repEv(`You sent the file ${String(f.name).slice(0, 120)} (${fmtSize(f.size)})`);
   }
   clearTimeout(progressHideTimer); progressHideTimer = setTimeout(() => { $('progress').classList.remove('show'); bar.style.width = 0; }, 600);
 }
@@ -695,6 +729,9 @@ function endAll(opts = {}) {
   setDrawMode(false); drawLayer.apply({ k: 'clear' });
   if (!opts.silent) { inSession = false; }
   byeReceived = false;
+  if (!opts.silent) {   // nothing from this session carries over to the next one (a reconnect keeps them)
+    control = true; remotePerms = { control: true, files: true, clip: true };
+  }
   window.dw.releaseAll(); clearTimeout(connectTimer);
   if (recorder && recorder.state !== 'inactive') recorder.stop();
   closeHistory(); pendingPw = null;
@@ -759,7 +796,7 @@ function revealToolbar() {
     $('toolbar').classList.add('hidden');
   }, 2600);
 }
-$('session').addEventListener('pointermove', (e) => { if (e.clientY - $('session').getBoundingClientRect().top < 80) revealToolbar(); });
+$('session').addEventListener('pointermove', (e) => { if ($('session').getBoundingClientRect().bottom - e.clientY < 80) revealToolbar(); });   // the toolbar sits at the bottom
 $('hotzone').addEventListener('pointerenter', revealToolbar);
 $('toolbar').addEventListener('pointerenter', revealToolbar);
 
@@ -832,8 +869,9 @@ document.addEventListener('keydown', (e) => { if (e.key === 'F11' && role === 'v
 let remoteInfo = null;
 function readDesks() {
   let d = null; try { d = JSON.parse(localStorage.getItem('ud-desks') || 'null'); } catch {}
-  if (!d) {
+  if (!Array.isArray(d)) {
     let old = []; try { old = JSON.parse(localStorage.getItem('dw-recent') || '[]'); } catch {}
+    if (!Array.isArray(old)) old = [];
     d = old.map((id, i) => ({ id, name: '', fav: false, last: Date.now() - i }));
   }
   return d;
@@ -859,6 +897,8 @@ function loadRecents() {
         <button class="mini" title="Remove">✕</button>
       </div>`;
     el.querySelector('b').textContent = x.name || 'Unnamed desk';
+    const label = x.name || fmt(x.id);   // screen readers: say which desk each small button acts on
+    el.querySelectorAll('.desk-acts button').forEach(b => b.setAttribute('aria-label', `${b.title.split(' (')[0]}: ${label}`));
     if (x.note) { el.querySelector('.desk-note').textContent = x.note.replace(/\s+/g, ' '); el.querySelector('.desk-main').title = 'Connect\n\n' + x.note; }
     el.querySelector('.desk-main').onclick = (e) => (e.ctrlKey || e.metaKey) && !TAB ? openTab(x.id) : connect(x.id);   // Ctrl/Cmd+click: open in a new tab
     const [star, ren, del] = el.querySelectorAll('.mini');
@@ -921,7 +961,7 @@ function startStats() {
 
 // ================= SESSION HISTORY =================
 let currentLog = null;
-function readHistory() { try { return JSON.parse(localStorage.getItem('ud-history') || '[]'); } catch { return []; } }
+function readHistory() { try { const h = JSON.parse(localStorage.getItem('ud-history') || '[]'); return Array.isArray(h) ? h : []; } catch { return []; } }
 function logHistory(entry) {
   const h = readHistory(); const e = { ...entry, start: Date.now(), end: null };
   if (entry.how !== 'declined' && entry.how !== 'blocked') currentLog = e.start; else e.end = e.start;
@@ -1031,6 +1071,12 @@ document.addEventListener('keydown', (e) => {
   if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
   else if (!e.shiftKey && (i === -1 || i === f.length - 1)) { e.preventDefault(); f[0].focus(); }
 }, true);
+// ---- accessible names and states ----
+// settings switches take their name from the row title; toggle-style buttons report on/off to screen readers
+document.querySelectorAll(".switch input").forEach(i => { if (!i.getAttribute("aria-label")) { const b = i.closest(".row")?.querySelector(".txt b"); if (b) i.setAttribute("aria-label", b.textContent.trim()); } });
+const syncPressed = (b) => b.setAttribute("aria-pressed", String(b.classList.contains("on")));
+document.querySelectorAll("#ctrlBtn, #scaleBtn, #drawBtn, #micBtn, #hostMic, #pauseBtn, #screensBtn, #phoneBtn, #browseBtn, #tmBtn, #piBtn, [data-seg] button, [data-theme-opt], .swatch, .st-tab").forEach(b => { syncPressed(b); new MutationObserver(() => syncPressed(b)).observe(b, { attributes: true, attributeFilter: ["class"] }); });
+
 $('clearHistory').onclick = () => { try { localStorage.removeItem('ud-history'); } catch {} renderHistory(); toast('History cleared', 1500); };
 renderHistory();
 
@@ -1129,7 +1175,8 @@ async function peerOptions() {
   const n = net(), iceServers = [...ICE.iceServers];
   if (n.turnUrls.trim()) {
     const cred = await window.dw.pwGet('__turn__');
-    iceServers.push({ urls: n.turnUrls.split(/[\s,]+/).filter(Boolean), username: n.turnUser || undefined, credential: cred || undefined });
+    if (n.turnUser && cred) iceServers.push({ urls: n.turnUrls.split(/[\s,]+/).filter(Boolean), username: n.turnUser, credential: cred });
+    else console.warn('Relay server skipped: it needs a username and password');   // an incomplete relay entry would stop every connection
   }
   const o = { config: { ...ICE, iceServers }, debug: 0 };
   if (n.host.trim()) Object.assign(o, { host: n.host.trim(), port: +n.port || (n.secure ? 443 : 80), path: n.path || '/', secure: !!n.secure });
@@ -1147,6 +1194,7 @@ $('netSave').onclick = async () => {
   const host = $('netHost').value.trim(), urls = $('turnUrls').value.trim();
   if (host && !/^[a-z0-9.-]+$/i.test(host)) return toast('Server host should look like peer.example.com', 2600);
   if (urls && !urls.split(/[\s,]+/).every(u => /^turns?:/.test(u))) return toast('TURN URLs start with turn: or turns:', 2600);
+  if (urls && (!$('turnUser').value.trim() || !($('turnPass').value || await window.dw.pwGet('__turn__')))) return toast('A relay server needs a username and password', 2600);
   S.net = { host, port: $('netPort').value.trim(), path: $('netPath').value.trim() || '/', secure: $('netSecure').checked, turnUrls: urls, turnUser: $('turnUser').value.trim() };
   if ($('turnPass').value) await window.dw.pwRemember('__turn__', $('turnPass').value);
   saveSettings(); toast('Saved: reconnecting to the network…', 1600); setTimeout(() => { peer?.destroy(); location.reload(); }, 700);
@@ -1366,7 +1414,9 @@ $('drawBtn').onclick = () => { setDrawMode(!drawMode); toast(drawMode ? 'Draw mo
 $('penColor').onclick = (e) => { e.stopPropagation(); penIdx = (penIdx + 1) % PENS.length; $('penColor').style.background = PENS[penIdx]; };
 $('penColor').style.background = PENS[0];
 const drawPt = (e) => { const r = drawCanvas.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }; };
-function drawMsg(m) { drawLayer.apply(m); send({ t: 'draw', ...m }); }
+// Draw locally only when the PC keeps its drawing out of the shared picture; otherwise the stroke already
+// comes back in the video, and drawing it here too would show it twice (slightly apart).
+function drawMsg(m) { if (remoteInfo?.drawHidden || m.k === 'clear') drawLayer.apply(m); send({ t: 'draw', ...m }); }
 drawCanvas.addEventListener('pointerdown', (e) => { if (!drawMode) return; drawCanvas.setPointerCapture(e.pointerId); strokeId = Math.random().toString(36).slice(2); drawMsg({ k: 'start', id: strokeId, color: PENS[penIdx], ...drawPt(e) }); });
 drawCanvas.addEventListener('pointermove', (e) => { if (!strokeId) return; const now = performance.now(); if (now - lastPt < 12) return; lastPt = now; drawMsg({ k: 'pt', id: strokeId, ...drawPt(e) }); });
 const endStroke = () => { if (strokeId) { drawMsg({ k: 'end', id: strokeId }); strokeId = null; } };
@@ -1587,7 +1637,7 @@ async function browseTo(dir) {
     fsCwd = null; $('fbPath').textContent = 'This PC'; $('fbUp').disabled = true; fbButtons(); fbAskClose();
     $('fbList').innerHTML = '';
     (roots.roots || []).forEach(x => addFbRow({ name: x.name, dir: true, path: x.path }, true));
-    if (roots.error) $('fbList').innerHTML = `<div class="fb-msg">${roots.error}</div>`;
+    if (roots.error) $('fbList').innerHTML = `<div class="fb-msg">${esc(roots.error)}</div>`;
     return;
   }
   fsCwd = r; $('fbPath').textContent = r.path; $('fbUp').disabled = false; fbButtons(); fbAskClose();

@@ -98,7 +98,7 @@
       "extendInfo": {
         "NSScreenCaptureUsageDescription": "UniDesk needs screen recording so a trusted partner can see this Mac.",
         "NSAppleEventsUsageDescription": "UniDesk uses accessibility to let a trusted partner control this Mac.",
-        "NSMicrophoneUsageDescription": "UniDesk can share this Mac's sound during a session."
+        "NSMicrophoneUsageDescription": "UniDesk uses the microphone when you press Talk during a session."
       }
     },
     "dmg": {

@@ -55,6 +55,15 @@ function updateKey() {
   if (process.platform === 'linux' && process.env.APPIMAGE) return 'linux-x64';   // the AppImage can replace itself
   return null;
 }
+// Windows: start a PowerShell script that keeps running after UniDesk exits. A detached PowerShell never runs
+// (it has no console and quits at once) and a normal child is closed together with the app, so Windows' process
+// service (WMI) starts it instead: it then runs on its own, in this desktop session and with this app's rights.
+// Resolves true once the script has been started.
+function runAfterExitWin(script) {
+  const inner = 'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand ' + Buffer.from(script, 'utf16le').toString('base64');
+  const launcher = `$si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }; $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = '${inner}'; ProcessStartupInformation = $si }; exit [int]$r.ReturnValue`;
+  return new Promise((res) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', launcher], { windowsHide: true, timeout: 30000 }, (err) => res(!err)));
+}
 function isPortable() { return process.platform === 'win32' && !fs.existsSync(path.join(path.dirname(process.execPath), 'Uninstall UniDesk.exe')); }
 let updateState = { busy: false };
 ipcMain.handle('update-check', async () => {
@@ -84,8 +93,10 @@ ipcMain.handle('update-install', async (e) => {
     if (key === 'win-installer') {
       const installDir = path.dirname(process.execPath);
       // wait for this app to exit, run the silent installer into the same folder, then start UniDesk again
-      const script = `Start-Sleep -Seconds 2; Start-Process -FilePath '${dest.replace(/'/g, "''")}' -ArgumentList '/S','/D=${installDir.replace(/'/g, "''")}' -Wait; Start-Process -FilePath '${process.execPath.replace(/'/g, "''")}'`;
-      spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', script], { detached: true, stdio: 'ignore' }).unref();
+      // (also if the install failed, so the app never just disappears)
+      const q = (s) => s.replace(/'/g, "''");
+      const script = `Start-Sleep -Seconds 2; try { $p = Start-Process -FilePath '${q(dest)}' -ArgumentList '--updated','/S','/D=${q(installDir)}' -PassThru; $p.WaitForExit() } catch {}; Start-Sleep -Seconds 1; Start-Process -FilePath '${q(process.execPath)}'`;
+      if (!(await runAfterExitWin(script))) throw new Error('Could not start the installer');
     } else if (IS_MAC) {
       const bundle = path.resolve(process.execPath, '../../..'); // .../UniDesk.app
       const sh = `sleep 2; X="$(mktemp -d)"; /usr/bin/ditto -xk "${dest}" "$X" && rm -rf "${bundle}" && mv "$X/UniDesk.app" "${bundle}" && open "${bundle}"`;
@@ -331,11 +342,11 @@ function secureInput(ev) {
   }
   return true;
 }
-ipcMain.handle('admin-relaunch', () => {
+ipcMain.handle('admin-relaunch', async () => {
   if (process.platform !== 'win32') return false;
   const args = app.isPackaged ? [] : [path.resolve(process.argv[1] || '.')];
   const argList = args.length ? ` -ArgumentList '${args[0].replace(/'/g, "''")}'` : '';
-  spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', `Start-Sleep -Milliseconds 800; Start-Process -FilePath '${process.execPath.replace(/'/g, "''")}'${argList} -Verb RunAs`], { detached: true, stdio: 'ignore' }).unref();
+  if (!(await runAfterExitWin(`Start-Sleep -Milliseconds 800; Start-Process -FilePath '${process.execPath.replace(/'/g, "''")}'${argList} -Verb RunAs`))) return false;
   quitting = true; setTimeout(() => app.exit(0), 300); return true;
 });
 
@@ -853,7 +864,7 @@ ipcMain.handle('power', (_e, what) => new Promise((res) => {
     const cmd = what === 'sleep'
       ? "Start-Sleep 3; Add-Type -AssemblyName System.Windows.Forms; [void][System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)"
       : 'Start-Sleep 3; shutdown.exe /l';
-    try { spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', cmd], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); res(true); } catch { res(false); }
+    try { spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', cmd], { stdio: 'ignore', windowsHide: true }).unref(); res(true); } catch { res(false); }   // not detached: a detached PowerShell never runs
   } else if (IS_MAC) {
     const verb = { sleep: 'sleep', signout: 'log out', shutdown: 'shut down' }[what];
     try { spawn('/usr/bin/osascript', ['-e', 'delay 3', '-e', `tell application "System Events" to ${verb}`], { detached: true, stdio: 'ignore' }).unref(); res(true); } catch { res(false); }

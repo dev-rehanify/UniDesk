@@ -1371,7 +1371,7 @@ function onSecureChunk(m) {
   }
 }
 function secureOff() { secureOn = false; sfParts.clear(); $('stage').classList.remove('secure'); $('secureImg').removeAttribute('src'); }
-$('adminBtn').onclick = () => { if (role) return toast('End the current session first', 2000); window.dw.adminRelaunch(); };
+$('adminBtn').onclick = () => { if (role) return toast('End the current session first', 2000); window.dw.adminRelaunch().then(ok => { if (!ok) toast('Couldn’t restart UniDesk as administrator', 2600); }); };
 refreshAdminUi();
 
 // ================= CHIME =================

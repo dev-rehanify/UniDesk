@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, desktopCapturer, dialog, clipboard, screen: eScreen, shell, nativeTheme, Tray, Menu, safeStorage, nativeImage, systemPreferences, globalShortcut } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, desktopCapturer, dialog, clipboard, screen: eScreen, shell, nativeTheme, Tray, Menu, safeStorage, nativeImage, systemPreferences } = require('electron');
 const IS_MAC = process.platform === 'darwin';
 const path = require('path');
 const fs = require('fs');
@@ -38,7 +38,7 @@ function get(url, onData, redirects = 0) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     if (!/(^|\.)github(usercontent)?\.com$/.test(u.hostname)) return reject(new Error('Blocked host ' + u.hostname));
-    https.get(u, { headers: { 'User-Agent': 'UniDesk-Updater' } }, (res) => {
+    const req = https.get(u, { headers: { 'User-Agent': 'UniDesk-Updater' } }, (res) => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirects < 6) { res.resume(); return resolve(get(new URL(res.headers.location, u).toString(), onData, redirects + 1)); }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
       const total = +res.headers['content-length'] || 0; const chunks = []; let got = 0;
@@ -46,6 +46,7 @@ function get(url, onData, redirects = 0) {
       res.on('end', () => resolve(onData ? null : Buffer.concat(chunks)));
       res.on('error', reject);
     }).on('error', reject);
+    req.setTimeout(30000, () => req.destroy(new Error('The update server stopped responding')));   // a stalled connection must not leave the updater busy forever
   });
 }
 function updateKey() {
@@ -68,14 +69,16 @@ ipcMain.handle('update-install', async (e) => {
   if (!app.isPackaged || updateState.busy) return { error: 'busy' };
   updateState.busy = true;
   const send = (m) => { try { e.sender.send('update-progress', m); } catch {} };
+  let dir = null, out = null;
   try {
     const remote = JSON.parse((await get(RELEASE_BASE + 'latest.json')).toString());
     const key = updateKey(), f = remote.files?.[key];
     if (!f || !/^[\w.-]+$/.test(f.name)) throw new Error('No update file for this system');
-    const dir = fs.mkdtempSync(path.join(os0.tmpdir(), 'unidesk-update-'));
-    const dest = path.join(dir, f.name); const out = fs.createWriteStream(dest); const hash = crypto.createHash('sha256');
+    dir = fs.mkdtempSync(path.join(os0.tmpdir(), 'unidesk-update-'));
+    const dest = path.join(dir, f.name); out = fs.createWriteStream(dest); const hash = crypto.createHash('sha256');
+    let writeErr = null; out.on('error', (err) => { writeErr = err; });   // e.g. a full disk: reported below instead of crashing
     await get(RELEASE_BASE + f.name, (c, got, total) => { out.write(c); hash.update(c); send({ phase: 'download', pct: total ? Math.round(got / total * 100) : 0 }); });
-    await new Promise(r => out.end(r));
+    await new Promise((r, j) => { if (writeErr) return j(writeErr); out.end(() => writeErr ? j(writeErr) : r()); });
     if (hash.digest('hex') !== String(f.sha256).toLowerCase()) throw new Error('Downloaded file failed its integrity check');
     send({ phase: 'install' });
     if (key === 'win-installer') {
@@ -95,7 +98,10 @@ ipcMain.handle('update-install', async (e) => {
     } else throw new Error('This copy cannot update itself');
     quitting = true; setTimeout(() => app.exit(0), 400);
     return { ok: true };
-  } catch (err) { updateState.busy = false; send({ phase: 'error', message: err.message }); return { error: err.message }; }
+  } catch (err) {
+    updateState.busy = false; try { out?.destroy(); } catch {} if (dir) fs.rm(dir, { recursive: true, force: true }, () => {});
+    send({ phase: 'error', message: err.message }); return { error: err.message };
+  }
 });
 
 // ---------- LAN mode: built-in signaling server + UDP discovery (no internet server needed) ----------
@@ -313,7 +319,6 @@ function secureStop() {
 }
 ipcMain.handle('secure-start', (e) => secureStart(e.sender));
 ipcMain.on('secure-stop', () => secureStop());
-ipcMain.handle('send-cad', async () => { try { return (await serviceCmd('SAS')) === 'OK'; } catch { return false; } });
 // route viewer input to the secure desktop while it is showing
 function secureInput(ev) {
   const a = secure.agent; if (!a || !secure.active) return false;
@@ -446,6 +451,9 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
   });
   win.loadFile('index.html');
+  // the window only ever shows the app's own page (a dropped .html file or a stray link must not replace it)
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:') || !url.split(/[?#]/)[0].endsWith('/index.html')) e.preventDefault(); });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   const hidden = process.argv.includes('--hidden');
   win.once('ready-to-show', () => { if (!hidden) win.show(); });
   win.on('close', (e) => { if (mainPrefs.tray && !quitting) { e.preventDefault(); win.hide(); trayHint(); } });
@@ -716,9 +724,10 @@ ipcMain.handle('fs-trash', async (_e, p) => {
 });
 ipcMain.handle('fs-stat', async (_e, f) => { try { const st = await fs.promises.stat(String(f)); return st.isFile() ? { size: st.size, name: path.basename(String(f)) } : null; } catch { return null; } });
 ipcMain.handle('fs-read', async (_e, f, offset, len) => {
-  const fh = await fs.promises.open(String(f), 'r');
+  let fh; try { fh = await fs.promises.open(String(f), 'r'); } catch { return null; }   // the file was moved, deleted or locked meanwhile
   try { const buf = Buffer.alloc(Math.min(len, 256 * 1024)); const { bytesRead } = await fh.read(buf, 0, buf.length, offset); return { d: buf.subarray(0, bytesRead).toString('base64'), n: bytesRead }; }
-  finally { await fh.close(); }
+  catch { return null; }
+  finally { await fh.close().catch(() => {}); }
 });
 
 // Address book backup: save to / load from a .json file the user picks
@@ -906,14 +915,16 @@ ipcMain.on('open-mac-pref', (_e, which) => {
 // ---------- Recording & screenshots ----------
 const mediaDir = (kind) => { const d = path.join(app.getPath(kind === 'video' ? 'videos' : 'pictures'), 'UniDesk'); fs.mkdirSync(d, { recursive: true }); return d; };
 const recs = new Map();
-ipcMain.handle('rec-start', (_e, name) => { const id = crypto.randomUUID(); const p = path.join(mediaDir('video'), name); recs.set(id, { s: fs.createWriteStream(p), p }); return id; });
+// a recording that can't be written (full disk, missing folder) is dropped quietly instead of crashing the app
+const recStream = (id, p) => { const s = fs.createWriteStream(p); s.on('error', (err) => { console.error('recording', err.message); recs.delete(id); }); recs.set(id, { s, p }); return id; };
+ipcMain.handle('rec-start', (_e, name) => recStream(crypto.randomUUID(), path.join(mediaDir('video'), path.basename(String(name)))));
 ipcMain.on('rec-chunk', (_e, id, buf) => recs.get(id)?.s.write(Buffer.from(buf)));
 ipcMain.handle('rec-end', (_e, id) => new Promise(res => { const r = recs.get(id); if (!r) return res(null); r.s.end(() => { recs.delete(id); res(r.p); }); }));
 // Recordings of incoming sessions (host side) go to Videos\UniDesk\Incoming
 const incomingRecDir = () => { const d = path.join(mediaDir('video'), 'Incoming'); fs.mkdirSync(d, { recursive: true }); return d; };
 ipcMain.handle('rec-in-start', (_e, name) => {
   const safe = path.basename(String(name)).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
-  const id = crypto.randomUUID(), p = path.join(incomingRecDir(), safe); recs.set(id, { s: fs.createWriteStream(p), p }); return id;
+  return recStream(crypto.randomUUID(), path.join(incomingRecDir(), safe));
 });
 ipcMain.on('rec-in-open', () => shell.openPath(incomingRecDir()));
 // Keep the folder tidy: recordings older than the chosen number of days are moved to the Recycle Bin
@@ -974,6 +985,7 @@ ipcMain.on('clipboard-write', (_e, t) => clipboard.writeText(String(t)));
 const incoming = new Map();
 const recvDir = () => { const d = path.join(app.getPath('downloads'), 'UniDesk'); fs.mkdirSync(d, { recursive: true }); return d; };
 ipcMain.on('file-start', (e, { id, name, dir }) => {
+  if (incoming.has(id)) return;   // a repeated start for a file already arriving
   const page = e.sender;
   const safe = path.basename(String(name)).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'file';
   // an upload from the visitor's file manager goes into the folder they were browsing
@@ -988,7 +1000,12 @@ ipcMain.on('file-start', (e, { id, name, dir }) => {
 ipcMain.on('file-chunk', (_e, { id, b64 }) => incoming.get(id)?.stream.write(Buffer.from(b64, 'base64')));
 ipcMain.on('file-end', (_e, { id }) => {
   const f = incoming.get(id); if (!f) return;
-  f.stream.end(() => { incoming.delete(id); if (!f.page.isDestroyed()) f.page.send('file-saved', f.target, f.into); });
+  incoming.delete(id);   // complete: no longer an unfinished file
+  f.stream.end(() => { if (!f.page.isDestroyed()) f.page.send('file-saved', f.target, f.into); });
+});
+// the session ended: remove files from this page that never finished arriving (only ones this transfer created)
+ipcMain.on('file-abort', (e) => {
+  for (const [id, f] of incoming) if (f.page === e.sender) { incoming.delete(id); f.stream.destroy(); fs.unlink(f.target, () => {}); }
 });
 ipcMain.on('show-file', (_e, p) => shell.showItemInFolder(p));
 
@@ -1010,21 +1027,24 @@ for (let i = 0; i <= 9; i++) { KEYMAP['Digit' + i] = Key['Num' + i]; KEYMAP['Num
 for (let i = 1; i <= 24; i++) if (Key['F' + i] !== undefined) KEYMAP['F' + i] = Key['F' + i];
 
 const BTN = [Button.LEFT, Button.MIDDLE, Button.RIGHT];
-const held = new Set();
+const held = new Set(), heldBtns = new Set();
 let queue = Promise.resolve();
 ipcMain.on('input', (_e, ev) => {
   if (ev && ev.t === 'cad') { serviceCmd('SAS').catch(() => {}); return; }
   if (secureInput(ev)) return; // lock screen / UAC / Ctrl+Alt+Del screen is showing
   queue = queue.then(() => handle(ev)).catch(err => console.error('input', err));
 });
-ipcMain.on('release-all', () => { queue = queue.then(async () => { for (const k of held) await keyboard.releaseKey(k).catch(() => {}); held.clear(); }); });
+ipcMain.on('release-all', () => { queue = queue.then(async () => {
+  for (const k of held) await keyboard.releaseKey(k).catch(() => {}); held.clear();
+  for (const b of heldBtns) await mouse.releaseButton(b).catch(() => {}); heldBtns.clear();   // a drag cut off by a dropped session must not leave the button down
+}); });
 
 async function handle(ev) {
   const d = activeDisplay || physBounds(eScreen.getPrimaryDisplay());
   switch (ev.t) {
     case 'move': await mouse.setPosition(new Point(d.x + Math.round(ev.x * (d.w - 1)), d.y + Math.round(ev.y * (d.h - 1)))); break;
-    case 'down': await mouse.pressButton(BTN[ev.b] ?? Button.LEFT); break;
-    case 'up': await mouse.releaseButton(BTN[ev.b] ?? Button.LEFT); break;
+    case 'down': { const b = BTN[ev.b] ?? Button.LEFT; heldBtns.add(b); await mouse.pressButton(b); break; }
+    case 'up': { const b = BTN[ev.b] ?? Button.LEFT; heldBtns.delete(b); await mouse.releaseButton(b); break; }
     case 'wheel': {
       const n = Math.max(1, Math.round(Math.abs(ev.dy) / 25));
       if (ev.dy) ev.dy > 0 ? await mouse.scrollDown(n) : await mouse.scrollUp(n);

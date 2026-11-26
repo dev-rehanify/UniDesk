@@ -21,7 +21,7 @@ A fast, private alternative to AnyDesk and TeamViewer, with unattended access, 4
 
 ## What is UniDesk?
 
-UniDesk is a **free remote desktop app** that lets you see and control another Windows or Mac computer over the internet using a 9-digit address, just like AnyDesk or TeamViewer. There's no account, no subscription and no port forwarding. Video and input go **directly between the two computers** (peer-to-peer WebRTC), encrypted end to end, so there's no middleman server watching your screen.
+UniDesk is a **free remote desktop app** that lets you see and control another Windows, Mac or Linux computer over the internet using a 9-digit address, just like AnyDesk or TeamViewer. There's no account, no subscription and no port forwarding. Video and input go **directly between the two computers** (peer-to-peer WebRTC), encrypted end to end, so there's no middleman server watching your screen.
 
 ## Features
 
@@ -29,7 +29,7 @@ UniDesk is a **free remote desktop app** that lets you see and control another W
 |---|---|
 | 📱 **Mobile viewer** | Control your computer from a phone or tablet browser: tap to click, hold to right-click, two fingers to scroll, pinch to zoom, on-screen keyboard and special keys. Send photos, files and text from the phone to the PC, receive files the PC sends, copy what the PC copied (text or images) with one tap, and chat both ways. Switch to trackpad mode for precise pointing, and restart, sleep, sign out or shut down the PC from the Power panel. Scan the QR code on the PC's home screen to open it already pointed at that PC. |
 | 🐧 **Linux** | x64 AppImage with automatic updates. |
-| 🔐 **End-to-end encrypted** | WebRTC DTLS-SRTP. Every session needs approval unless *you* enable unattended access. |
+| 🔐 **Encrypted in transit** | WebRTC DTLS-SRTP, directly between the two devices. Every session needs approval unless *you* enable unattended access. |
 | ⚡ **Fast P2P streaming** | AV1 → VP9 → H.264 codec preference, up to **4K at 60 fps**, low-latency playout, live stats (codec, fps, Mbps, ping). |
 | 🔢 **One-time access codes** | A temporary code (like TeamViewer's password) that works once and then changes. |
 | 🗂️ **Remote file manager** | Browse the other PC's drives, download, upload into any folder, create folders, rename and delete (to the Recycle Bin): only when allowed. |
@@ -121,7 +121,7 @@ npm start
 
 ## How it works
 
-- **Signaling:** a PeerJS server introduces the two computers by address (only connection metadata, never your screen).
+- **Signaling:** a PeerJS server introduces the two computers by address (only connection metadata, never your screen). Public STUN servers from Google and Cloudflare help the two devices find a direct path and see their IP addresses; the app checks GitHub for updates, and the mobile viewer loads PeerJS from unpkg.
 - **Media:** a WebRTC peer connection carries the screen video, audio and a data channel for input, clipboard, chat and files.
 - **Input:** mouse and keyboard events are replayed on the host with [nut.js](https://github.com/nut-tree/nut.js).
 - **Security:** sessions require approval; unattended access uses a PBKDF2-SHA256 verifier and HMAC challenge–response, with lockout.

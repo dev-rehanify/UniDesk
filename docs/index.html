@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>UniDesk: Free Open-Source Remote Desktop for Windows &amp; Mac (AnyDesk Alternative)</title>
+<title>UniDesk: Free Open-Source Remote Desktop for Windows, Mac &amp; Linux (AnyDesk Alternative)</title>
 <meta name="description" content="UniDesk is a free, open-source, peer-to-peer remote desktop app for Windows, macOS and Linux, with a mobile viewer for phones. Control any computer with a 9-digit address: unattended access, 4K 60fps AV1 streaming, file transfer, clipboard sync. A private AnyDesk and TeamViewer alternative.">
 <meta name="keywords" content="UniDesk, remote desktop, free remote desktop, open source remote desktop, AnyDesk alternative, TeamViewer alternative, remote access software, unattended access, remote control PC, remote desktop Mac, WebRTC remote desktop">
 <link rel="canonical" href="https://dev-rehanify.github.io/UniDesk/">
@@ -11,13 +11,13 @@
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="UniDesk">
-<meta property="og:title" content="UniDesk: UniDesk. Anywhere. Instantly.">
-<meta property="og:description" content="Free, open-source, peer-to-peer remote desktop for Windows and Mac. A fast, private AnyDesk alternative.">
+<meta property="og:title" content="UniDesk: free remote desktop. Anywhere. Instantly.">
+<meta property="og:description" content="Free, open-source, peer-to-peer remote desktop for Windows, Mac and Linux. A fast, private AnyDesk alternative.">
 <meta property="og:url" content="https://dev-rehanify.github.io/UniDesk/">
 <meta property="og:image" content="https://dev-rehanify.github.io/UniDesk/screenshots/home-dark.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="UniDesk: free open-source remote desktop">
-<meta name="twitter:description" content="Control any Windows or Mac computer, peer-to-peer and encrypted. Free forever.">
+<meta name="twitter:description" content="Control any Windows, Mac or Linux computer, peer-to-peer and encrypted. Free forever.">
 <meta name="twitter:image" content="https://dev-rehanify.github.io/UniDesk/screenshots/home-dark.png">
 <script type="application/ld+json">
 {
@@ -40,7 +40,7 @@
       "codeRepository": "https://github.com/dev-rehanify/UniDesk",
       "screenshot": "https://dev-rehanify.github.io/UniDesk/screenshots/home-dark.png",
       "author": { "@type": "Person", "name": "dev-rehanify", "url": "https://github.com/dev-rehanify" },
-      "featureList": ["Peer-to-peer WebRTC connection", "End-to-end encryption (DTLS-SRTP)", "Unattended access with password", "AV1, VP9 and H.264 up to 4K 60 fps", "Multi-monitor switching", "Two-way clipboard sync", "Drag and drop file transfer", "Chat", "Session recording and screenshots", "Auto-reconnect", "Address book", "Invite links", "Draw on remote screen", "Custom signaling and TURN relay", "Update notifications", "Dark and light themes"]
+      "featureList": ["Peer-to-peer WebRTC connection", "Encrypted in transit (DTLS-SRTP)", "Unattended access with password", "AV1, VP9 and H.264 up to 4K 60 fps", "Multi-monitor switching", "Two-way clipboard sync", "Drag and drop file transfer", "Chat", "Session recording and screenshots", "Auto-reconnect", "Address book", "Invite links", "Draw on remote screen", "Custom signaling and TURN relay", "Update notifications", "Dark and light themes"]
     },
     {
       "@type": "FAQPage",
@@ -48,7 +48,7 @@
         { "@type": "Question", "name": "Is UniDesk free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. UniDesk is free forever and open source under the MIT license. There is no account, subscription or commercial-use fee." } },
         { "@type": "Question", "name": "Is UniDesk a good AnyDesk or TeamViewer alternative?", "acceptedAnswer": { "@type": "Answer", "text": "UniDesk covers the core features of AnyDesk and TeamViewer (address-based connections, remote control, unattended access, file transfer, clipboard sync and multi-monitor support) and is free and open source. Video goes peer-to-peer between the two computers." } },
         { "@type": "Question", "name": "Does UniDesk work on Mac?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. UniDesk runs on Windows 10, Windows 11 and macOS (Apple Silicon and Intel). On macOS, grant Screen Recording and Accessibility permissions so a partner can see and control the Mac." } },
-        { "@type": "Question", "name": "Is UniDesk secure?", "acceptedAnswer": { "@type": "Answer", "text": "Connections are encrypted end to end with WebRTC DTLS-SRTP. Every session needs approval unless you enable unattended access, whose password is stored only as a PBKDF2 hash and checked with a one-time challenge, with lockout after 5 wrong attempts." } },
+        { "@type": "Question", "name": "Is UniDesk secure?", "acceptedAnswer": { "@type": "Answer", "text": "Connections are encrypted in transit with WebRTC DTLS-SRTP and go directly between the two devices. Every session needs approval unless you enable unattended access, whose password is stored only as a PBKDF2 hash and checked with a one-time challenge, with lockout after 5 wrong attempts." } },
         { "@type": "Question", "name": "How do I connect with UniDesk?", "acceptedAnswer": { "@type": "Answer", "text": "Open UniDesk on both computers, enter your partner's 9-digit address and press Connect. Your partner clicks Accept, or you enter the unattended-access password." } }
       ]
     }
@@ -134,7 +134,7 @@
     <h2>Everything you need from remote desktop software</h2>
     <p class="sub">Fast, private and packed with features, free for everyone.</p>
     <div class="grid">
-      <div class="f"><div class="e">🔐</div><h3>End-to-end encrypted</h3><p>WebRTC DTLS-SRTP. Your screen goes straight to your partner, never through our servers.</p></div>
+      <div class="f"><div class="e">🔐</div><h3>Encrypted in transit</h3><p>WebRTC DTLS-SRTP. Your screen goes straight to your partner, never through our servers.</p></div>
       <div class="f"><div class="e">⚡</div><h3>4K 60 fps, low latency</h3><p>AV1, VP9 and H.264 with screen-content tuning and live stats.</p></div>
       <div class="f"><div class="e">🔑</div><h3>Unattended access</h3><p>Connect to your own PCs with a password. Hashed, challenge–response, brute-force lockout.</p></div>
       <div class="f"><div class="e">🖥️</div><h3>Multi-monitor</h3><p>Switch remote screens from live thumbnails or keyboard shortcuts.</p></div>
@@ -216,8 +216,8 @@
     <details><summary>Is UniDesk a good AnyDesk or TeamViewer alternative?</summary><p>UniDesk covers the core features (address-based connections, remote control, unattended access, file transfer, clipboard sync and multi-monitor) and keeps your video peer-to-peer.</p></details>
     <details><summary>Does UniDesk work on Linux?</summary><p>Yes. Download the x64 AppImage, make it executable (<code>chmod +x</code>) and run it. Remote control works on X11 desktops; Wayland sessions have not been tested yet.</p></details>
 <details><summary>Can I control my computer from my phone?</summary><p>Yes. Open <a href="m/">the mobile viewer</a> in your phone’s browser (Safari or Chrome), type your computer’s address and connect. Tap to click, hold to right-click, two fingers to scroll, pinch to zoom. You can add it to your home screen like an app.</p></details>
-<details><summary>Does UniDesk work on Mac?</summary><p>Yes, on macOS for Apple Silicon and Intel. Grant Screen Recording and Accessibility in System Settings so a partner can see and control your Mac. The first time, right-click the app and choose Open.</p></details>
-    <details><summary>Is it secure?</summary><p>Connections are end-to-end encrypted. Every session needs your approval unless you enable unattended access, whose password is never stored, only a PBKDF2 hash, with lockout after 5 wrong tries.</p></details>
+<details><summary>Does UniDesk work on Mac?</summary><p>Yes, on macOS for Apple Silicon and Intel. Grant Screen Recording and Accessibility in System Settings so a partner can see and control your Mac. The first time, open UniDesk once, then go to System Settings → Privacy &amp; Security and click <em>Open Anyway</em> (see the <a href="install.html">install guide</a>).</p></details>
+    <details><summary>Is it secure?</summary><p>Connections are encrypted in transit and go directly between the two devices. Every session needs your approval unless you enable unattended access, whose password is never stored, only a PBKDF2 hash, with lockout after 5 wrong tries. To find each other, devices use the PeerJS connection server and public STUN servers from Google and Cloudflare, which see your IP address but never your screen. The app checks GitHub for updates, and the mobile viewer loads its connection library from unpkg.</p></details>
     <details><summary>Why does Windows or macOS warn me when I open it?</summary><p>UniDesk isn’t code-signed yet. The source is public so anyone can audit it. The <a href="install.html">install guide</a> walks you through it step by step for Windows, Mac and Linux, with a check that confirms you are ready. <strong>Windows SmartScreen:</strong> click <em>More info</em> → <em>Run anyway</em>. <strong>Windows Smart App Control</strong> blocks all unsigned apps and has no per-app exception; it only allows them if you turn it off in Windows Security → App &amp; browser control (most PCs don’t have it on). <strong>macOS 15 and later:</strong> open UniDesk once, then go to System Settings → Privacy &amp; Security and click <em>Open Anyway</em>. On any device you can also use the <a href="m/">mobile viewer</a> in the browser, with nothing to install.</p></details>
   </section>
 

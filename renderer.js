@@ -339,15 +339,6 @@ function preferCodecSdp(sdp) {
   lines[mi] = [...head, ...sorted].join(' ');
   return lines.join('\r\n');
 }
-function preferCodecs(pc) {
-  try {
-    const order = ['video/AV1', 'video/VP9', 'video/H264', 'video/VP8'];
-    const rank = (c) => { const i = order.indexOf(c.mimeType); return i < 0 ? 99 : i; };
-    const sorted = [...RTCRtpSender.getCapabilities('video').codecs].sort((a, b) => rank(a) - rank(b));
-    pc.getTransceivers().forEach(t => { if (t.sender.track?.kind === 'video') t.setCodecPreferences(sorted); });
-  } catch (e) { console.warn('codec prefs', e); }
-}
-
 function tune(pc, mode) {
   const q = QUALITY[mode] || QUALITY.balanced;
   const apply = () => pc.getSenders().forEach(s => {
@@ -733,6 +724,7 @@ function endAll(opts = {}) {
     control = true; remotePerms = { control: true, files: true, clip: true };
   }
   window.dw.releaseAll(); clearTimeout(connectTimer);
+  if (!opts.silent) window.dw.fileAbort();   // files that were still arriving won't finish now
   if (recorder && recorder.state !== 'inactive') recorder.stop();
   closeHistory(); pendingPw = null;
   $('stage').classList.remove('actual'); $('scaleBtn').classList.remove('on'); $('scaleLabel').textContent = 'Fit';
@@ -1156,7 +1148,7 @@ $('recBtn').onclick = async () => {
     clearInterval(recTick); $('recBtn').classList.remove('recording'); $('recTime').textContent = '';
     await new Promise(r => setTimeout(r, 300));
     const p = await window.dw.recEnd(recId); recorder = null; recId = null;
-    if (p) { toast('Recording saved to Videos\\UniDesk', 2600); window.dw.showFile(p); }
+    if (p) { toast('Recording saved to Videos\\UniDesk', 2600); window.dw.showFile(p); } else toast('Couldn’t save the recording', 2600);
   };
   recorder.start(1000); recStartAt = Date.now(); $('recBtn').classList.add('recording');
   recTick = setInterval(() => { const s = Math.floor((Date.now() - recStartAt) / 1000); $('recTime').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }, 500);

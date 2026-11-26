@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('dw', {
   fileStart: (m) => ipcRenderer.send('file-start', m),
   fileChunk: (m) => ipcRenderer.send('file-chunk', m),
   fileEnd: (m) => ipcRenderer.send('file-end', m),
+  fileAbort: () => ipcRenderer.send('file-abort'),
   showFile: (p) => ipcRenderer.send('show-file', p),
   onFileSaved: (cb) => ipcRenderer.on('file-saved', (_e, p, into) => cb(p, into)),
   systemDark: () => ipcRenderer.invoke('system-dark'),

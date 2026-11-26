@@ -290,7 +290,7 @@ function deviceName() { const ua = navigator.userAgent; return (/iPad/.test(ua) 
 function fail(msg) {
   clearTimeout(connectTimer);
   try { call?.close(); } catch {} try { conn?.close(); } catch {} try { voice?.close(); } catch {}
-  call = conn = voice = null; voiceEl.srcObject = null; target = null; inSession = false;
+  call = conn = voice = null; voiceEl.srcObject = null; target = null; inSession = false; recOn = false;
   $('inbox').innerHTML = ''; incoming.clear(); ciParts.clear(); pcClip = '';
   $('chatLog').innerHTML = '<div class="chat-empty">Messages with the person at the PC appear here.</div>'; unread = 0; $('chatDot').classList.remove('on');
   sheet(null); show('home'); $('hint').textContent = msg;
@@ -357,6 +357,7 @@ function wire(c) {
       case 'screens': screens = m.list || []; curScreen = m.cur || 0; renderScr(); break;
       case 'screen': curScreen = m.i; renderScr(); toast('Now viewing Screen ' + (m.i + 1), 1500); break;
       case 'chat': addChat(String(m.text || ''), false); break;
+      case 'rec-on': recOn = true; chip(); if (!m.again) toast('Your partner is recording this session', 3200); break;
       case 'power-r': onPowerReply(m); break;
       case 'reboot-r': onPowerReply({ ...m, what: 'reboot' }); break;
       case 'clip': if (typeof m.text === 'string') onPcClip(m.text); break;
@@ -389,7 +390,8 @@ function onCall(c) {
   });
   c.on('close', () => call === c && dropped());
 }
-function chip() { $('chip').textContent = (remoteName || fmt(target || '')) + (remotePerms.control === false ? ' · view only' : '') + (hd ? ' · HD' : ''); }
+let recOn = false;   // the PC is recording this session: shown in the chip for as long as it lasts
+function chip() { $('chip').textContent = (recOn ? '● REC · ' : '') + (remoteName || fmt(target || '')) + (remotePerms.control === false ? ' · view only' : '') + (hd ? ' · HD' : ''); }
 function renderScr() {
   $('scrBtn').style.display = screens.length > 1 ? '' : 'none';
   $('scrTxt').textContent = 'Screen ' + (curScreen + 1);

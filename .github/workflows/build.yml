@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: release
-  cancel-in-progress: true
+  cancel-in-progress: false   # never stop a run part-way through publishing; a newer push waits its turn
 
 jobs:
   build:
@@ -119,7 +119,9 @@ jobs:
             const files={'win-installer':f('UniDesk-'+v+'-win-x64.exe'),'win-zip':f('UniDesk-'+v+'-win-x64.zip'),'mac-arm64':f('UniDesk-'+v+'-mac-arm64.zip'),'mac-x64':f('UniDesk-'+v+'-mac-x64.zip'),'linux-x64':f('UniDesk-'+v+'-linux-x64.AppImage')};
             fs.writeFileSync('dist/latest.json',JSON.stringify({version:v,build:+process.env.BUILD,sha:process.env.SHA,files},null,2));
           "
-          # remove old files, then upload the fresh builds
-          for a in $(gh release view "$V" --json assets --jq '.assets[].name'); do gh release delete-asset "$V" "$a" --yes; done
-          gh release upload "$V" dist/* --clobber
+          # replace the files in place (no moment where a download link is missing), latest.json last so
+          # installed apps never see a build whose files aren't up yet, then remove files no longer built
+          gh release upload "$V" $(ls dist/* | grep -v '/latest.json$') --clobber
+          gh release upload "$V" dist/latest.json --clobber
+          for a in $(gh release view "$V" --json assets --jq '.assets[].name'); do [ -e "dist/$a" ] || gh release delete-asset "$V" "$a" --yes; done
           gh release edit "$V" --latest --notes "Free, open-source peer-to-peer remote desktop for Windows, macOS and Linux. Download the file for your system below."
